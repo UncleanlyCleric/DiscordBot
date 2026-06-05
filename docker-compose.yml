@@ -8,7 +8,7 @@ services:
     environment:
       - LAVALINK_SERVER_PASSWORD=youshallnotpass
     ports:
-      - "2333:2333"
+      - "8080:8080"
 
     restart: unless-stopped
 
@@ -24,7 +24,7 @@ services:
 
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - LAVALINK_URI=http://lavalink:2333
+      - LAVALINK_URI=http://lavalink:8080
       - LAVALINK_PASSWORD=youshallnotpass
       - QUOTES_DB_PATH=/data/quotes.db
 
