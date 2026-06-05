@@ -8,6 +8,18 @@ class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    # ---------------- EVENT ----------------
+    @commands.Cog.listener()
+    async def on_wavelink_track_end(self, payload):
+        player = payload.player
+
+        if not player or not player.guild:
+            return
+
+        mgr = get_manager(player.guild.id)
+        await mgr.play_next()
+
+    # ---------------- HELPERS ----------------
     async def ensure(self, ctx):
         if not ctx.author.voice:
             return None
@@ -43,8 +55,8 @@ class Music(commands.Cog):
     @commands.hybrid_command()
     async def skip(self, ctx):
         mgr = get_manager(ctx.guild.id)
+
         await mgr.skip()
-        await mgr.play_next()
         await ctx.send("Skipped.")
 
     # ---------------- STOP ----------------

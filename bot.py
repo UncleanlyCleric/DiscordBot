@@ -4,7 +4,7 @@ from discord.ext import commands, tasks
 from dotenv import load_dotenv
 import wavelink
 
-from music.registry import cleanup_managers, remove_manager
+from music.registry import cleanup_managers
 
 load_dotenv()
 
@@ -25,15 +25,15 @@ intents.voice_states = True
 class Bot(commands.Bot):
     def __init__(self):
         super().__init__(
-            command_prefix="!",
-            intents=intents
+            command_prefix="!",  # only used for quotes
+            intents=intents,
+            help_command=None
         )
 
     # ---------------- STARTUP ----------------
     async def setup_hook(self):
         print("Starting setup_hook...")
 
-        # ---- validation ----
         if not TOKEN:
             raise RuntimeError("Missing DISCORD_TOKEN")
 
@@ -43,24 +43,16 @@ class Bot(commands.Bot):
         # ---- Lavalink ----
         print("Connecting to Lavalink...")
 
-        try:
-            nodes = [
-                wavelink.Node(
-                    uri=LAVALINK_URI,
-                    password=LAVALINK_PASSWORD
-                )
-            ]
-
-            await wavelink.Pool.connect(
-                nodes=nodes,
-                client=self
+        nodes = [
+            wavelink.Node(
+                uri=LAVALINK_URI,
+                password=LAVALINK_PASSWORD
             )
+        ]
 
-            print("Lavalink connected")
+        await wavelink.Pool.connect(nodes=nodes, client=self)
 
-        except Exception as e:
-            print(f"Lavalink connection failed: {e}")
-            raise
+        print("Lavalink connected")
 
         # ---- cogs ----
         extensions = [
@@ -77,7 +69,7 @@ class Bot(commands.Bot):
             except Exception as e:
                 print(f"Failed {ext}: {e}")
 
-        # ---- background tasks ----
+        # ---- cleanup task ----
         self.cleanup_task.start()
 
         print("setup_hook complete")
@@ -90,40 +82,31 @@ class Bot(commands.Bot):
         except Exception as e:
             print(f"Cleanup error: {e}")
 
-    # ---------------- EVENTS ----------------
-async def on_ready(self):
-    try:
-        synced = await self.tree.sync()
-        print(f"Synced {len(synced)} slash commands")
-    except Exception as e:
-        print(f"Failed to sync slash commands: {e}")
+    # ---------------- PREFIX RESTRICTION ----------------
+    async def on_message(self, message: discord.Message):
+        if message.author.bot:
+            return
 
-    print(f"\nLogged in as {self.user} (ID: {self.user.id})")
+        # ONLY allow !quote commands
+        if message.content.startswith("!"):
+            cmd = message.content.split(" ")[0][1:]
 
-    print("\n========== PREFIX COMMANDS ==========")
-    if self.commands:
-        for cmd in sorted(self.commands, key=lambda c: c.name):
-            print(f" - {cmd.name}")
-    else:
-        print("No prefix commands loaded.")
+            if not cmd.startswith("quote"):
+                return  # block everything else
 
-    print("\n========== SLASH COMMANDS ==========")
-    slash_commands = self.tree.get_commands()
+        await self.process_commands(message)
 
-    if slash_commands:
-        for cmd in sorted(slash_commands, key=lambda c: c.name):
-            print(f" - /{cmd.name}")
-    else:
-        print("No slash commands loaded.")
+    # ---------------- READY ----------------
+    async def on_ready(self):
+        try:
+            synced = await self.tree.sync()
+            print(f"Synced {len(synced)} slash commands")
+        except Exception as e:
+            print(f"Slash sync failed: {e}")
 
-    print("\n========== COGS ==========")
-    if self.cogs:
-        for cog in sorted(self.cogs):
-            print(f" - {cog}")
-    else:
-        print("No cogs loaded.")
+        print(f"\nLogged in as {self.user} (ID: {self.user.id})")
+        print("Bot ready.\n")
 
-    print("\nBot ready.\n")
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":

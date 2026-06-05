@@ -13,6 +13,16 @@ class MusicManager:
         self.last_active = time.time()
         self.lock = asyncio.Lock()
 
+    # ---------------- EVENT BINDING ----------------
+    def _bind_events(self):
+        if not self.player:
+            return
+
+        @self.player.event
+        async def on_wavelink_track_end(payload):
+            # automatically play next song
+            await self.play_next()
+
     # ---------------- STATE ----------------
     def touch(self):
         self.last_active = time.time()
@@ -26,6 +36,10 @@ class MusicManager:
             return self.player
 
         self.player = await channel.connect(cls=wavelink.Player)
+
+        # attach events
+        self._bind_events()
+
         return self.player
 
     # ---------------- QUEUE ----------------
@@ -40,6 +54,7 @@ class MusicManager:
     async def stop(self):
         if self.player:
             await self.player.disconnect()
+
         self.player = None
 
         # clear queue
@@ -60,5 +75,6 @@ class MusicManager:
 
             track = await self.queue.get()
             self.now_playing = track
+            self.touch()
 
             await self.player.play(track)
