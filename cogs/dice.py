@@ -1,9 +1,13 @@
 import re
 import random
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 
+# =====================================================
+# 🎲 DICE PARSER
+# =====================================================
 DICE_REGEX = re.compile(
     r"(?P<count>\d{1,3})?d(?P<sides>\d{1,4})"
     r"(?P<modifier>[+-]\d+)?"
@@ -15,28 +19,36 @@ MAX_DICE = 100
 MAX_SIDES = 1000
 
 
+# =====================================================
+# 🎲 DICE COG
+# =====================================================
 class Dice(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    # -----------------------------
+    # CORE ROLL HELPERS
+    # -----------------------------
     def roll_once(self, count: int, sides: int):
         return [random.randint(1, sides) for _ in range(count)]
 
-    # -----------------------------
-    # ROLL COMMAND
-    # -----------------------------
-    @commands.hybrid_command(
+    # =====================================================
+    # /roll COMMAND (SLASH ONLY - FIXED)
+    # =====================================================
+    @app_commands.command(
         name="roll",
         description="Roll dice (d20, 2d6+3, 4d6kh3, adv/dis)"
     )
-    async def roll(self, ctx, *, expression: str = "d20"):
+    @app_commands.describe(expression="Dice expression like 2d6+3, d20, 4d6kh3 adv")
+    async def roll(self, interaction: discord.Interaction, expression: str = "d20"):
 
         expression = expression.replace(" ", "").lower()
         match = DICE_REGEX.fullmatch(expression)
 
         if not match:
-            return await ctx.send(
-                "Invalid format. Try `d20`, `2d6+3`, `4d6kh3 adv`, or `d20 dis`."
+            return await interaction.response.send_message(
+                "❌ Invalid format.\nTry: `d20`, `2d6+3`, `4d6kh3 adv`, `d20 dis`",
+                ephemeral=True
             )
 
         count = int(match.group("count") or 1)
@@ -49,11 +61,12 @@ class Dice(commands.Cog):
         keep_high = int(keep_high) if keep_high else None
         keep_low = int(keep_low) if keep_low else None
 
-        mode = match.group("mode")  # adv / dis / None
+        mode = match.group("mode")
 
         if count > MAX_DICE or sides > MAX_SIDES:
-            return await ctx.send(
-                f"Limit exceeded. Max: {MAX_DICE}d{MAX_SIDES}"
+            return await interaction.response.send_message(
+                f"❌ Limit exceeded: max `{MAX_DICE}d{MAX_SIDES}`",
+                ephemeral=True
             )
 
         # -------------------------
@@ -75,7 +88,7 @@ class Dice(commands.Cog):
         base_total = sum(rolls) + modifier
 
         # -------------------------
-        # ADV / DIS
+        # ADV / DIS MODE
         # -------------------------
         adv_data = None
 
@@ -88,17 +101,17 @@ class Dice(commands.Cog):
 
             if mode == "adv":
                 final_total = max(total_a, total_b)
-                adv_label = "ADVANTAGE"
+                label = "ADVANTAGE"
             else:
                 final_total = min(total_a, total_b)
-                adv_label = "DISADVANTAGE"
+                label = "DISADVANTAGE"
 
-            adv_data = (roll_a, total_a, roll_b, total_b, adv_label)
+            adv_data = (roll_a, total_a, roll_b, total_b, label)
         else:
             final_total = base_total
 
         # -------------------------
-        # EMBED
+        # EMBED OUTPUT
         # -------------------------
         embed = discord.Embed(
             title="🎲 Dice Roll",
@@ -151,8 +164,11 @@ class Dice(commands.Cog):
             inline=True
         )
 
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
 
-async def setup(bot):
+# =====================================================
+# SETUP
+# =====================================================
+async def setup(bot: commands.Bot):
     await bot.add_cog(Dice(bot))

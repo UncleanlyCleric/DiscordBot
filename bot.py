@@ -38,7 +38,9 @@ class Bot(commands.Bot):
 
         self.logger = setup_logger()
 
-    # ---------------- STARTUP ----------------
+    # =====================================================
+    # STARTUP (CORRECT PLACE FOR EVERYTHING IMPORTANT)
+    # =====================================================
     async def setup_hook(self):
         self.logger.info("Starting setup_hook...")
 
@@ -52,7 +54,7 @@ class Bot(commands.Bot):
             raise RuntimeError("Missing Lavalink config")
 
         # =====================================================
-        # SQLITE INIT
+        # DATABASE INIT
         # =====================================================
         try:
             await init_db()
@@ -79,7 +81,7 @@ class Bot(commands.Bot):
         self.logger.info("Lavalink connected")
 
         # =====================================================
-        # COGS
+        # LOAD COGS (IMPORTANT: BEFORE SYNC)
         # =====================================================
         extensions = [
             "cogs.music",
@@ -98,12 +100,23 @@ class Bot(commands.Bot):
                 self.logger.error(f"Failed to load {ext}: {e}")
 
         # =====================================================
+        # SLASH COMMAND SYNC (FIXED LOCATION)
+        # =====================================================
+        try:
+            synced = await self.tree.sync()
+            self.logger.info(f"Synced {len(synced)} slash commands")
+        except Exception as e:
+            self.logger.error(f"Slash sync failed: {e}")
+
+        # =====================================================
         # TASKS
         # =====================================================
         self.cleanup_task.start()
         self.logger.info("setup_hook complete")
 
-    # ---------------- CLEANUP LOOP ----------------
+    # =====================================================
+    # CLEANUP LOOP
+    # =====================================================
     @tasks.loop(minutes=10)
     async def cleanup_task(self):
         try:
@@ -112,31 +125,19 @@ class Bot(commands.Bot):
         except Exception as e:
             self.logger.error(f"Cleanup error: {e}")
 
-    # ---------------- MESSAGE HANDLING ----------------
+    # =====================================================
+    # PREFIX COMMAND HANDLING
+    # =====================================================
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
 
         await self.process_commands(message)
 
-    # ---------------- READY EVENT ----------------
-    async def on_ready(self):
-        try:
-            synced = await self.tree.sync()
 
-            self.logger.info(
-                f"Synced {len(synced)} slash commands"
-            )
-        except Exception as e:
-            self.logger.error(f"Slash sync failed: {e}")
-
-        self.logger.info(
-            f"Logged in as {self.user} (ID: {self.user.id})"
-        )
-        self.logger.info("Bot ready.")
-
-
-# ---------------- RUN BOT ----------------
+# =====================================================
+# RUN BOT
+# =====================================================
 if __name__ == "__main__":
     bot = Bot()
     bot.run(TOKEN)
