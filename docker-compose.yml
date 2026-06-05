@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+
+  lavalink:
+    image: fredboat/lavalink:latest
+    container_name: lavalink
+    environment:
+      - LAVALINK_SERVER_PASSWORD=youshallnotpass
+    ports:
+      - "2333:2333"
+
+    restart: unless-stopped
+
+  bot:
+    build: .
+    container_name: discord-bot
+    depends_on:
+      - lavalink
+
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - LAVALINK_URI=http://lavalink:2333
+      - LAVALINK_PASSWORD=youshallnotpass
+
+    restart: unless-stopped
