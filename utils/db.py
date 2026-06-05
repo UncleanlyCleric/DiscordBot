@@ -1,10 +1,9 @@
+import os
 import sqlite3
 import asyncio
-import random
-import os
 
 # -----------------------------------------------------
-# DATA DIRECTORY ARCHITECTURE
+# DATA ARCHITECTURE (/data folder)
 # -----------------------------------------------------
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -14,11 +13,16 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 DB_PATH = os.path.join(DATA_DIR, "quotes.db")
 
+_lock = asyncio.Lock()
+
 
 # -----------------------------------------------------
-# INIT
+# INIT DATABASE (FORCE CREATE)
 # -----------------------------------------------------
 async def init():
+    print("[DB] INIT CALLED")
+    print("[DB] DB_PATH =", DB_PATH)
+
     async with _lock:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -35,6 +39,8 @@ async def init():
 
         conn.commit()
         conn.close()
+
+    print("[DB] INIT COMPLETE")
 
 
 # -----------------------------------------------------
@@ -55,9 +61,11 @@ async def add(guild_id: int, category: str, content: str, author_id: str):
 
 
 # -----------------------------------------------------
-# FETCH RANDOM
+# FETCH RANDOM QUOTE
 # -----------------------------------------------------
 async def fetch_random(guild_id: int, category: str):
+    import random
+
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
@@ -76,7 +84,7 @@ async def fetch_random(guild_id: int, category: str):
 
 
 # -----------------------------------------------------
-# SEARCH
+# SEARCH QUOTES
 # -----------------------------------------------------
 async def search(guild_id: int, query: str):
     conn = sqlite3.connect(DB_PATH)
@@ -95,7 +103,7 @@ async def search(guild_id: int, query: str):
 
 
 # -----------------------------------------------------
-# DELETE
+# DELETE QUOTE
 # -----------------------------------------------------
 async def delete(quote_id: int, guild_id: int):
     async with _lock:
@@ -116,7 +124,7 @@ async def delete(quote_id: int, guild_id: int):
 
 
 # -----------------------------------------------------
-# EDIT
+# EDIT QUOTE
 # -----------------------------------------------------
 async def edit(quote_id: int, guild_id: int, new_content: str):
     async with _lock:
