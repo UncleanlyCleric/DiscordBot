@@ -134,4 +134,9 @@ class Bot(commands.Bot):
     # CLEANUP LOOP
     # =====================================================
     @tasks.loop(minutes=10)
-    async def cleanup
+    async def cleanup_task(self):
+        try:
+            cleanup_managers(timeout=3600)
+            self.logger.info("Cleanup task executed")
+        except Exception as e:
+            self.logger.error(f"Cleanup error: {e}")
