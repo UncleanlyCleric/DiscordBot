@@ -2,278 +2,122 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
-from utils.db import (
-    init,
-    add,
-    fetch_random,
-    search,
-    delete,
-    edit
-)
+from utils.db import add, fetch_random, search, delete, edit, init
 
-# =====================================================
-# 🎯 QUOTES COG (DYNAMIC PREFIX ROUTER VERSION)
-# =====================================================
+
 class Quotes(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._initialized = False
 
     # =====================================================
-    # DB INIT (RUN ONCE)
+    # DB INIT
     # =====================================================
     @commands.Cog.listener()
     async def on_ready(self):
-        if getattr(self, "_initialized", False):
+        if self._initialized:
             return
-
         self._initialized = True
 
-        try:
-            await init()
-            print("[QUOTES] DB initialized successfully")
-        except Exception as e:
-            print("[QUOTES] DB init failed:", e)
+        await init()
 
     # =====================================================
-    # CORE DB HELPERS
+    # RAW MESSAGE ROUTER (CALLED FROM BOT)
     # =====================================================
-    async def add_quote(self, guild_id, category, content, author_id):
-        return await add(
-            guild_id=guild_id,
-            category=category,
-            content=content,
-            author_id=str(author_id)
-        )
-
-    async def get_quote(self, guild_id, category):
-        return await fetch_random(guild_id, category)
-
-    # =====================================================
-    # 🚀 CUSTOM PREFIX ROUTER (!add<cat>, !<cat>)
-    # =====================================================
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        if message.author.bot:
-            return
-
-        if not message.guild:
-            return
-
+    async def handle_raw_message(self, message: discord.Message):
         content = message.content.strip()
 
-        # -------------------------------------------------
-        # RESERVED COMMANDS 
-        # -------------------------------------------------
-        reserved = {
-            "help",
-            "ping",
-            "stats",
-            "quote",
-            "addquote",
-            "searchquote",
-            "delquote",
-            "editquote"
-        }
-
-        # =================================================
-        # ➕ ADD QUOTE: !add<category> <text>
-        # =================================================
+        # -------------------------
+        # !add<category> text
+        # -------------------------
         if content.startswith("!add"):
             try:
-                after_prefix = content[4:]  # remove "!add"
-                parts = after_prefix.split(" ", 1)
+                raw = content[4:]
+                category, text = raw.split(" ", 1)
 
-                if len(parts) < 2:
-                    return await message.channel.send(
-                        "Usage: `!add<category> <text>`"
-                    )
-
-                category = parts[0].strip().lower()
-                text = parts[1].strip()
-
-                if category in reserved:
-                    return await message.channel.send(
-                        "❌ That category is reserved."
-                    )
-
-                await self.add_quote(
-                    message.guild.id,
-                    category,
-                    text,
-                    message.author.id
+                await add(
+                    guild_id=message.guild.id,
+                    category=category.lower(),
+                    content=text,
+                    author_id=str(message.author.id)
                 )
 
                 await message.channel.send("✅ Quote added.")
+            except:
+                await message.channel.send("Usage: `!add<category> <text>`")
+            return
+
+        # -------------------------
+        # !<category>
+        # -------------------------
+        if content.startswith("!") and len(content) > 1:
+            category = content[1:].strip().lower()
+
+            if " " in category:
                 return
 
-            except Exception as e:
-                print("[DB] ADD FAILED:", e)
-                await message.channel.send("❌ Failed to add quote.")
-                return
+            result = await fetch_random(message.guild.id, category)
 
-        # =================================================
-        # 💬 GET QUOTE: !<category>
-        # =================================================
-        if content.startswith("!"):
-            try:
-                category = content[1:].strip().lower()
-
-                # ignore invalid usage like "! help"
-                if not category or " " in category:
-                    return
-
-                if category in reserved:
-                    return
-
-                result = await self.get_quote(message.guild.id, category)
-
-                if not result:
-                    return await message.channel.send("No quotes found.")
-
+            if result:
                 await message.channel.send(f"💬 {result}")
 
-            except Exception as e:
-                print("[DB] FETCH FAILED:", e)
-                await message.channel.send("❌ Error fetching quote.")
-
     # =====================================================
-    # 🔎 PREFIX COMMANDS (still supported)
+    # PREFIX COMMANDS
     # =====================================================
     @commands.command(name="searchquote")
-    async def searchquote_prefix(self, ctx: commands.Context, *, query: str):
-        if not ctx.guild:
-            return await ctx.send("Guild-only command.")
+    async def searchquote(self, ctx, *, query: str):
+        results = await search(ctx.guild.id, query)
 
-        try:
-            results = await search(ctx.guild.id, query)
+        if not results:
+            return await ctx.send("No matches.")
 
-            if not results:
-                return await ctx.send("No matches found.")
-
-            msg = "\n".join([f"`{r[0]}` [{r[1]}] {r[2]}" for r in results[:10]])
-            await ctx.send(msg)
-
-        except Exception as e:
-            print("[DB] SEARCH FAILED:", e)
-            await ctx.send("❌ Search error.")
+        msg = "\n".join([f"`{r[0]}` [{r[1]}] {r[2]}" for r in results[:10]])
+        await ctx.send(msg)
 
     @commands.command(name="delquote")
-    async def delquote_prefix(self, ctx: commands.Context, quote_id: int):
-        if not ctx.guild:
-            return await ctx.send("Guild-only command.")
-
-        try:
-            ok = await delete(quote_id, ctx.guild.id)
-            await ctx.send("🗑️ Deleted." if ok else "Quote not found.")
-        except Exception as e:
-            print("[DB] DELETE FAILED:", e)
-            await ctx.send("❌ Delete error.")
+    async def delquote(self, ctx, quote_id: int):
+        ok = await delete(quote_id, ctx.guild.id)
+        await ctx.send("🗑️ Deleted" if ok else "Not found")
 
     @commands.command(name="editquote")
-    async def editquote_prefix(self, ctx: commands.Context, quote_id: int, *, new_content: str):
-        if not ctx.guild:
-            return await ctx.send("Guild-only command.")
-
-        try:
-            ok = await edit(quote_id, ctx.guild.id, new_content)
-            await ctx.send("✏️ Updated." if ok else "Quote not found.")
-        except Exception as e:
-            print("[DB] EDIT FAILED:", e)
-            await ctx.send("❌ Edit error.")
+    async def editquote(self, ctx, quote_id: int, *, text: str):
+        ok = await edit(quote_id, ctx.guild.id, text)
+        await ctx.send("✏️ Updated" if ok else "Not found")
 
     # =====================================================
-    # 🌐 SLASH COMMAND GROUP (/quote)
+    # SLASH COMMANDS
     # =====================================================
-    quote_group = app_commands.Group(
-        name="quote",
-        description="Quote system"
-    )
+    quote = app_commands.Group(name="quote", description="Quote system")
 
-    @quote_group.command(name="add", description="Add a quote")
-    async def quote_add(self, interaction: discord.Interaction, category: str, content: str):
-        if interaction.guild is None:
-            return await interaction.response.send_message(
-                "Guild-only command.",
-                ephemeral=True
-            )
+    @quote.command(name="add")
+    async def slash_add(self, interaction: discord.Interaction, category: str, content: str):
+        await add(
+            interaction.guild.id,
+            category,
+            content,
+            str(interaction.user.id)
+        )
 
-        try:
-            await self.add_quote(
-                interaction.guild.id,
-                category,
-                content,
-                interaction.user.id
-            )
+        await interaction.response.send_message("✅ Added", ephemeral=True)
 
-            await interaction.response.send_message(
-                "✅ Quote added.",
-                ephemeral=True
-            )
+    @quote.command(name="get")
+    async def slash_get(self, interaction: discord.Interaction, category: str):
+        result = await fetch_random(interaction.guild.id, category)
 
-        except Exception as e:
-            print("[DB] INSERT FAILED:", e)
-            await interaction.response.send_message(
-                "❌ Failed to add quote.",
-                ephemeral=True
-            )
+        if not result:
+            return await interaction.response.send_message("No quotes", ephemeral=True)
 
-    @quote_group.command(name="get", description="Get a random quote")
-    async def quote_get(self, interaction: discord.Interaction, category: str):
-        if interaction.guild is None:
-            return await interaction.response.send_message(
-                "Guild-only command.",
-                ephemeral=True
-            )
+        await interaction.response.send_message(f"💬 {result}")
 
-        try:
-            result = await self.get_quote(interaction.guild.id, category)
+    @quote.command(name="search")
+    async def slash_search(self, interaction: discord.Interaction, query: str):
+        results = await search(interaction.guild.id, query)
 
-            if not result:
-                return await interaction.response.send_message(
-                    "No quotes found.",
-                    ephemeral=True
-                )
+        msg = "\n".join([f"`{r[0]}` [{r[1]}] {r[2]}" for r in results[:10]])
 
-            await interaction.response.send_message(f"💬 {result}")
-
-        except Exception as e:
-            print("[DB] FETCH FAILED:", e)
-            await interaction.response.send_message(
-                "❌ Error fetching quote.",
-                ephemeral=True
-            )
-
-    @quote_group.command(name="search", description="Search quotes")
-    async def quote_search(self, interaction: discord.Interaction, query: str):
-        if interaction.guild is None:
-            return await interaction.response.send_message(
-                "Guild-only command.",
-                ephemeral=True
-            )
-
-        try:
-            results = await search(interaction.guild.id, query)
-
-            if not results:
-                return await interaction.response.send_message(
-                    "No matches found.",
-                    ephemeral=True
-                )
-
-            msg = "\n".join([f"`{r[0]}` [{r[1]}] {r[2]}" for r in results[:10]])
-
-            await interaction.response.send_message(msg)
-
-        except Exception as e:
-            print("[DB] SEARCH FAILED:", e)
-            await interaction.response.send_message(
-                "❌ Search error.",
-                ephemeral=True
-            )
+        await interaction.response.send_message(msg, ephemeral=True)
 
 
-# =====================================================
-# BOT SETUP
-# =====================================================
 async def setup(bot: commands.Bot):
     await bot.add_cog(Quotes(bot))
+    bot.tree.add_command(Quotes.quote)
