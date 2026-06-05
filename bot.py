@@ -89,7 +89,7 @@ class Bot(commands.Bot):
             "cogs.admin",
             "cogs.dice",
             "cogs.help",
-            "cogs.core_logging"
+            "cogs.logger"
         ]
 
         for ext in extensions:

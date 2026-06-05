@@ -9,9 +9,6 @@ class Dice(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-        # 🔥 THIS IS THE CRITICAL FIX
-        bot.tree.add_command(self.roll)
-
     DICE_REGEX = re.compile(
         r"(?P<count>\d{1,3})?d(?P<sides>\d{1,4})"
         r"(?P<modifier>[+-]\d+)?"
