@@ -7,7 +7,6 @@ import wavelink
 from music.registry import cleanup_managers
 from utils.logger import setup_logger
 
-# ✅ SQLITE INIT IMPORT
 from utils.db import init as init_db
 
 load_dotenv()
@@ -35,12 +34,14 @@ class Bot(commands.Bot):
             help_command=None
         )
 
-        # Logger
         self.logger = setup_logger()
 
     # ---------------- STARTUP ----------------
     async def setup_hook(self):
         self.logger.info("Starting setup_hook...")
+
+        self.logger.info(f"Lavalink URI: {LAVALINK_URI}")
+        self.logger.info(f"Lavalink password set: {bool(LAVALINK_PASSWORD)}")
 
         if not TOKEN:
             raise RuntimeError("Missing DISCORD_TOKEN")
@@ -48,24 +49,25 @@ class Bot(commands.Bot):
         if not LAVALINK_URI or not LAVALINK_PASSWORD:
             raise RuntimeError("Missing Lavalink config")
 
-        # ---------------- SQLITE INIT (IMPORTANT FIX) ----------------
+        # ---------------- SQLITE INIT ----------------
         try:
             await init_db()
-            self.logger.info("SQLite database initialized")
+            self.logger.info("SQLite initialized")
         except Exception as e:
             self.logger.error(f"DB init failed: {e}")
 
         # ---------------- LAVALINK ----------------
         self.logger.info("Connecting to Lavalink...")
 
-        nodes = [
-            wavelink.Node(
-                uri=LAVALINK_URI,
-                password=LAVALINK_PASSWORD
-            )
-        ]
-
-        await wavelink.Pool.connect(nodes=nodes, client=self)
+        await wavelink.Pool.connect(
+            nodes=[
+                wavelink.Node(
+                    uri=LAVALINK_URI,
+                    password=LAVALINK_PASSWORD
+                )
+            ],
+            client=self
+        )
 
         self.logger.info("Lavalink connected")
 
@@ -86,9 +88,7 @@ class Bot(commands.Bot):
             except Exception as e:
                 self.logger.error(f"Failed to load {ext}: {e}")
 
-        # ---------------- CLEANUP TASK ----------------
         self.cleanup_task.start()
-
         self.logger.info("setup_hook complete")
 
     # ---------------- CLEANUP LOOP ----------------
