@@ -127,4 +127,5 @@ async def setup(bot: commands.Bot):
     await bot.add_cog(cog)
 
     # IMPORTANT: register slash group properly
-    bot.tree.add_command(cog.quote_group)
+    async def setup(bot: commands.Bot):
+        await bot.add_cog(Quotes(bot))
