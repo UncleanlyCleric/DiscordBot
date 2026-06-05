@@ -122,8 +122,10 @@ class Bot(commands.Bot):
     # ---------------- READY EVENT ----------------
     async def on_ready(self):
         try:
+            self.tree.clear_commands(guild=None)
             synced = await self.tree.sync()
-            self.logger.info(f"Synced {len(synced)} slash commands")
+
+            self.logger.info(f"Synced {len(synced)} slash commands (FORCED RESET)")
         except Exception as e:
             self.logger.error(f"Slash sync failed: {e}")
 
