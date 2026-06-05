@@ -14,12 +14,18 @@ LAVALINK_URI = os.getenv("LAVALINK_URI")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
 
 
+# =====================================================
+# INTENTS
+# =====================================================
 intents = discord.Intents.default()
 intents.guilds = True
 intents.message_content = True
 intents.voice_states = True
 
 
+# =====================================================
+# BOT CLASS
+# =====================================================
 class Bot(commands.Bot):
     def __init__(self):
         super().__init__(
@@ -27,26 +33,52 @@ class Bot(commands.Bot):
             intents=intents,
             help_command=None
         )
+
         self.logger = setup_logger()
 
+    # =====================================================
+    # STARTUP HOOK
+    # =====================================================
     async def setup_hook(self):
         self.logger.info("Starting setup_hook...")
 
         if not TOKEN:
             raise RuntimeError("Missing DISCORD_TOKEN")
 
+        if not LAVALINK_URI or not LAVALINK_PASSWORD:
+            raise RuntimeError("Missing Lavalink config")
+
+        # =====================================================
+        # DB INIT
+        # =====================================================
         await init_db()
+        self.logger.info("Database initialized")
 
-        await wavelink.Pool.connect(
-            nodes=[
-                wavelink.Node(
-                    uri=LAVALINK_URI,
-                    password=LAVALINK_PASSWORD
-                )
-            ],
-            client=self
-        )
+        # =====================================================
+        # LAVALINK CONNECTION
+        # =====================================================
+        try:
+            self.logger.info("Connecting to Lavalink...")
 
+            await wavelink.Pool.connect(
+                nodes=[
+                    wavelink.Node(
+                        uri=LAVALINK_URI,
+                        password=LAVALINK_PASSWORD
+                    )
+                ],
+                client=self
+            )
+
+            self.logger.info("Lavalink connected")
+
+        except Exception as e:
+            self.logger.error(f"Lavalink connection failed: {e}")
+            raise
+
+        # =====================================================
+        # LOAD COGS
+        # =====================================================
         extensions = [
             "cogs.quotes",
             "cogs.music",
@@ -63,11 +95,17 @@ class Bot(commands.Bot):
             except Exception as e:
                 self.logger.error(f"Failed {ext}: {e}")
 
-        await self.tree.sync()
-        self.logger.info("Slash sync complete")
+        # =====================================================
+        # SLASH SYNC
+        # =====================================================
+        try:
+            synced = await self.tree.sync()
+            self.logger.info(f"Slash sync complete: {len(synced)} commands")
+        except Exception as e:
+            self.logger.error(f"Slash sync failed: {e}")
 
     # =====================================================
-    # RAW MESSAGE ROUTER (quotes system)
+    # MESSAGE ROUTER (quotes system)
     # =====================================================
     async def on_message(self, message: discord.Message):
         if message.author.bot:
@@ -80,17 +118,20 @@ class Bot(commands.Bot):
 
         await self.process_commands(message)
 
+    # =====================================================
+    # FIXED COMMAND ERROR HANDLER (NO DECORATOR!)
+    # =====================================================
+    async def on_command_error(self, ctx, error):
+        if isinstance(error, commands.CommandNotFound):
+            return  # silently ignore !test, !yes, etc
+
+        self.logger.error(f"Command error: {error}")
+        raise error
+
 
 # =====================================================
-# FIX: SILENTLY IGNORE UNKNOWN COMMANDS
+# RUN BOT
 # =====================================================
-@Bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.CommandNotFound):
-        return
-    raise error
-
-
 if __name__ == "__main__":
     bot = Bot()
     bot.run(TOKEN)
