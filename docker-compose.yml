@@ -1,7 +1,6 @@
 version: "3.9"
 
 services:
-
   lavalink:
     image: ghcr.io/lavalink-devs/lavalink:4
     container_name: lavalink
@@ -18,9 +17,10 @@ services:
     depends_on:
       - lavalink
 
-    volumes:
-      - quotes_data:/data
     working_dir: /app
+
+    volumes:
+      - ./data:/app/data   # ✅ THIS IS WHERE IT BELONGS
 
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
@@ -28,7 +28,3 @@ services:
       - LAVALINK_PASSWORD=youshallnotpass
 
     restart: unless-stopped
-
-volumes:
-  quotes_data:
-    driver: local

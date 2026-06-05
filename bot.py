@@ -9,6 +9,9 @@ from utils.logger import setup_logger
 
 from utils.db import init as init_db
 
+print("START DIR:", os.getcwd())
+print("WRITE TEST:", os.access(".", os.W_OK))
+
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
