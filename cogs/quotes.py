@@ -1,122 +1,134 @@
-import json
-import os
-import random
-from typing import List, Optional, Tuple
+import discord
+from discord.ext import commands
 
-FILE_PATH = "quotes.json"
+from utils.db import (
+    init,
+    add,
+    fetch_random,
+    search,
+    delete,
+    edit
+)
+
+# =====================================================
+# 🎯 QUOTES COG
+# =====================================================
+class Quotes(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        self.initialized = False
+
+    # -------------------------------------------------
+    # INIT DB ON READY (SAFE GUARANTEE)
+    # -------------------------------------------------
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if self.initialized:
+            return
+
+        try:
+            await init()
+            self.initialized = True
+            print("[QUOTES] DB initialized successfully")
+        except Exception as e:
+            print("[QUOTES] DB init failed:", e)
+
+    # -------------------------------------------------
+    # ADD QUOTE
+    # -------------------------------------------------
+    @commands.hybrid_command(name="addquote")
+    async def addquote(self, ctx: commands.Context, category: str, *, content: str):
+
+        try:
+            await add(
+                guild_id=ctx.guild.id,
+                category=category,
+                content=content,
+                author_id=str(ctx.author.id)
+            )
+
+            print(f"[DB] INSERT OK guild={ctx.guild.id} category={category}")
+
+            await ctx.send("✅ Quote added.")
+
+        except Exception as e:
+            print("[DB] INSERT FAILED:", e)
+            await ctx.send("❌ Failed to add quote.")
+
+    # -------------------------------------------------
+    # RANDOM QUOTE
+    # -------------------------------------------------
+    @commands.hybrid_command(name="quote")
+    async def quote(self, ctx: commands.Context, category: str):
+
+        try:
+            result = await fetch_random(ctx.guild.id, category)
+
+            if not result:
+                return await ctx.send("No quotes found.")
+
+            await ctx.send(f"💬 {result}")
+
+        except Exception as e:
+            print("[DB] FETCH FAILED:", e)
+            await ctx.send("❌ Error fetching quote.")
+
+    # -------------------------------------------------
+    # SEARCH QUOTES
+    # -------------------------------------------------
+    @commands.hybrid_command(name="searchquote")
+    async def searchquote(self, ctx: commands.Context, *, query: str):
+
+        try:
+            results = await search(ctx.guild.id, query)
+
+            if not results:
+                return await ctx.send("No matches found.")
+
+            msg = "\n".join([f"`{r[0]}` [{r[1]}] {r[2]}" for r in results[:10]])
+
+            await ctx.send(msg)
+
+        except Exception as e:
+            print("[DB] SEARCH FAILED:", e)
+            await ctx.send("❌ Search error.")
+
+    # -------------------------------------------------
+    # DELETE QUOTE
+    # -------------------------------------------------
+    @commands.hybrid_command(name="delquote")
+    async def delquote(self, ctx: commands.Context, quote_id: int):
+
+        try:
+            ok = await delete(quote_id, ctx.guild.id)
+
+            if ok:
+                await ctx.send("🗑️ Deleted.")
+            else:
+                await ctx.send("Quote not found.")
+
+        except Exception as e:
+            print("[DB] DELETE FAILED:", e)
+            await ctx.send("❌ Delete error.")
+
+    # -------------------------------------------------
+    # EDIT QUOTE
+    # -------------------------------------------------
+    @commands.hybrid_command(name="editquote")
+    async def editquote(self, ctx: commands.Context, quote_id: int, *, new_content: str):
+
+        try:
+            ok = await edit(quote_id, ctx.guild.id, new_content)
+
+            if ok:
+                await ctx.send("✏️ Updated.")
+            else:
+                await ctx.send("Quote not found.")
+
+        except Exception as e:
+            print("[DB] EDIT FAILED:", e)
+            await ctx.send("❌ Edit error.")
 
 
-# ---------------- INTERNAL HELPERS ----------------
-def _load():
-    if not os.path.exists(FILE_PATH):
-        return {}
-
-    try:
-        with open(FILE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except json.JSONDecodeError:
-        return {}
-
-
-def _save(data):
-    with open(FILE_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
-
-
-# ---------------- INIT ----------------
-async def init():
-    if not os.path.exists(FILE_PATH):
-        _save({})
-
-
-# ---------------- ADD ----------------
-async def add(guild_id: int, category: str, content: str, author_id: str):
-    data = _load()
-
-    guild = data.setdefault(str(guild_id), {})
-    cat = guild.setdefault(category.lower(), [])
-
-    quote_id = sum(len(v) for v in guild.values()) + 1
-
-    cat.append({
-        "id": quote_id,
-        "content": content,
-        "author": author_id
-    })
-
-    _save(data)
-
-
-# ---------------- FETCH RANDOM ----------------
-async def fetch_random(guild_id: int, category: str) -> Optional[str]:
-    data = _load()
-
-    guild = data.get(str(guild_id), {})
-    cat = guild.get(category.lower(), [])
-
-    if not cat:
-        return None
-
-    q = random.choice(cat)
-    return q["content"]
-
-
-# ---------------- SEARCH ----------------
-async def search(guild_id: int, query: str) -> List[Tuple[int, str, str]]:
-    data = _load()
-
-    guild = data.get(str(guild_id), {})
-
-    results = []
-
-    for category, quotes in guild.items():
-        for q in quotes:
-            if query.lower() in q["content"].lower():
-                results.append((q["id"], category, q["content"]))
-
-    return results
-
-
-# ---------------- DELETE ----------------
-async def delete(quote_id: int, guild_id: int) -> bool:
-    data = _load()
-
-    guild = data.get(str(guild_id), {})
-
-    found = False
-
-    for category in list(guild.keys()):
-        new_list = []
-
-        for q in guild[category]:
-            if q["id"] == quote_id:
-                found = True
-                continue
-            new_list.append(q)
-
-        guild[category] = new_list
-
-    if found:
-        _save(data)
-
-    return found
-
-
-# ---------------- EDIT ----------------
-async def edit(quote_id: int, guild_id: int, new_content: str) -> bool:
-    data = _load()
-
-    guild = data.get(str(guild_id), {})
-
-    found = False
-
-    for category in guild:
-        for q in guild[category]:
-            if q["id"] == quote_id:
-                q["content"] = new_content
-                found = True
-
-    if found:
-        _save(data)
-
-    return found
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Quotes(bot))
