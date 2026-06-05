@@ -12,24 +12,12 @@ from utils.db import (
 )
 
 
+# =====================================================
+# 🎯 QUOTES COG (STABLE VERSION)
+# =====================================================
 class Quotes(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    # =====================================================
-    # INIT DB
-    # =====================================================
-    @commands.Cog.listener()
-    async def on_ready(self):
-        if self.initialized:
-            return
-
-        try:
-            await init()
-            self.initialized = True
-            print("[QUOTES] DB initialized successfully")
-        except Exception as e:
-            print("[QUOTES] DB init failed:", e)
 
     # =====================================================
     # SHARED HELPERS
@@ -49,9 +37,9 @@ class Quotes(commands.Cog):
     # PREFIX COMMANDS
     # =====================================================
     @commands.command(name="addquote")
-    async def addquote_prefix(self, ctx, category: str, *, content: str):
+    async def addquote_prefix(self, ctx: commands.Context, category: str, *, content: str):
         if not ctx.guild:
-            return await ctx.send("Guild only command.")
+            return await ctx.send("Guild-only command.")
 
         try:
             await self.add_quote(ctx.guild.id, category, content, ctx.author.id)
@@ -61,9 +49,9 @@ class Quotes(commands.Cog):
             await ctx.send("❌ Failed to add quote.")
 
     @commands.command(name="quote")
-    async def quote_prefix(self, ctx, category: str):
+    async def quote_prefix(self, ctx: commands.Context, category: str):
         if not ctx.guild:
-            return await ctx.send("Guild only command.")
+            return await ctx.send("Guild-only command.")
 
         try:
             result = await self.get_quote(ctx.guild.id, category)
@@ -77,18 +65,68 @@ class Quotes(commands.Cog):
             print("[DB] FETCH FAILED:", e)
             await ctx.send("❌ Error fetching quote.")
 
+    @commands.command(name="searchquote")
+    async def searchquote_prefix(self, ctx: commands.Context, *, query: str):
+        if not ctx.guild:
+            return await ctx.send("Guild-only command.")
+
+        try:
+            results = await search(ctx.guild.id, query)
+
+            if not results:
+                return await ctx.send("No matches found.")
+
+            msg = "\n".join([f"`{r[0]}` [{r[1]}] {r[2]}" for r in results[:10]])
+            await ctx.send(msg)
+
+        except Exception as e:
+            print("[DB] SEARCH FAILED:", e)
+            await ctx.send("❌ Search error.")
+
+    @commands.command(name="delquote")
+    async def delquote_prefix(self, ctx: commands.Context, quote_id: int):
+        if not ctx.guild:
+            return await ctx.send("Guild-only command.")
+
+        try:
+            ok = await delete(quote_id, ctx.guild.id)
+            await ctx.send("🗑️ Deleted." if ok else "Quote not found.")
+        except Exception as e:
+            print("[DB] DELETE FAILED:", e)
+            await ctx.send("❌ Delete error.")
+
+    @commands.command(name="editquote")
+    async def editquote_prefix(self, ctx: commands.Context, quote_id: int, *, new_content: str):
+        if not ctx.guild:
+            return await ctx.send("Guild-only command.")
+
+        try:
+            ok = await edit(quote_id, ctx.guild.id, new_content)
+            await ctx.send("✏️ Updated." if ok else "Quote not found.")
+        except Exception as e:
+            print("[DB] EDIT FAILED:", e)
+            await ctx.send("❌ Edit error.")
+
     # =====================================================
-    # SLASH GROUP
+    # SLASH COMMAND GROUP (/quote ...)
     # =====================================================
     quote_group = app_commands.Group(
         name="quote",
         description="Quote system"
     )
 
-    @quote_group.command(name="add")
-    async def quote_add(self, interaction: discord.Interaction, category: str, content: str):
+    @quote_group.command(name="add", description="Add a quote")
+    async def quote_add(
+        self,
+        interaction: discord.Interaction,
+        category: str,
+        content: str
+    ):
         if interaction.guild is None:
-            return await interaction.response.send_message("Guild only command.", ephemeral=True)
+            return await interaction.response.send_message(
+                "Guild-only command.",
+                ephemeral=True
+            )
 
         try:
             await self.add_quote(
@@ -97,34 +135,88 @@ class Quotes(commands.Cog):
                 content,
                 interaction.user.id
             )
-            await interaction.response.send_message("✅ Quote added.", ephemeral=True)
+
+            await interaction.response.send_message(
+                "✅ Quote added.",
+                ephemeral=True
+            )
 
         except Exception as e:
             print("[DB] INSERT FAILED:", e)
-            await interaction.response.send_message("❌ Failed.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Failed to add quote.",
+                ephemeral=True
+            )
 
-    @quote_group.command(name="get")
-    async def quote_get(self, interaction: discord.Interaction, category: str):
+    @quote_group.command(name="get", description="Get a random quote")
+    async def quote_get(
+        self,
+        interaction: discord.Interaction,
+        category: str
+    ):
         if interaction.guild is None:
-            return await interaction.response.send_message("Guild only command.", ephemeral=True)
+            return await interaction.response.send_message(
+                "Guild-only command.",
+                ephemeral=True
+            )
 
         try:
             result = await self.get_quote(interaction.guild.id, category)
 
             if not result:
-                return await interaction.response.send_message("No quotes found.", ephemeral=True)
+                return await interaction.response.send_message(
+                    "No quotes found.",
+                    ephemeral=True
+                )
 
             await interaction.response.send_message(f"💬 {result}")
 
         except Exception as e:
             print("[DB] FETCH FAILED:", e)
-            await interaction.response.send_message("❌ Error.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Error fetching quote.",
+                ephemeral=True
+            )
+
+    @quote_group.command(name="search", description="Search quotes")
+    async def quote_search(
+        self,
+        interaction: discord.Interaction,
+        query: str
+    ):
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "Guild-only command.",
+                ephemeral=True
+            )
+
+        try:
+            results = await search(interaction.guild.id, query)
+
+            if not results:
+                return await interaction.response.send_message(
+                    "No matches found.",
+                    ephemeral=True
+                )
+
+            msg = "\n".join([f"`{r[0]}` [{r[1]}] {r[2]}" for r in results[:10]])
+
+            await interaction.response.send_message(msg)
+
+        except Exception as e:
+            print("[DB] SEARCH FAILED:", e)
+            await interaction.response.send_message(
+                "❌ Search error.",
+                ephemeral=True
+            )
 
 
+# =====================================================
+# CLEAN SETUP (IMPORTANT)
+# =====================================================
 async def setup(bot: commands.Bot):
     cog = Quotes(bot)
     await bot.add_cog(cog)
 
-    # IMPORTANT: register slash group properly
-    async def setup(bot: commands.Bot):
-        await bot.add_cog(Quotes(bot))
+    # Register slash group ONCE (safe)
+    bot.tree.add_command(cog.quote_group)
