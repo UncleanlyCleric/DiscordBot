@@ -4,10 +4,12 @@ import asyncio
 import tempfile
 
 # -----------------------------------------------------
-# PATH SETUP (always stable, relative to project root)
+# PATH SETUP (correct: project root)
 # -----------------------------------------------------
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # utils/
+BASE_DIR = os.path.dirname(BASE_DIR)                    # project root
+
 FILE_PATH = os.path.join(BASE_DIR, "quotes.json")
 
 _lock = asyncio.Lock()
