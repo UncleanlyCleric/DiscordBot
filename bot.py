@@ -39,7 +39,13 @@ class Bot(commands.Bot):
         self.logger = setup_logger()
 
     # =====================================================
-    # STARTUP (CORRECT PLACE FOR EVERYTHING IMPORTANT)
+    # HELPER: GET GUILD OBJECTS
+    # =====================================================
+    def get_guild_objects(self):
+        return [discord.Object(id=g.id) for g in self.guilds]
+
+    # =====================================================
+    # STARTUP
     # =====================================================
     async def setup_hook(self):
         self.logger.info("Starting setup_hook...")
@@ -81,7 +87,7 @@ class Bot(commands.Bot):
         self.logger.info("Lavalink connected")
 
         # =====================================================
-        # LOAD COGS (IMPORTANT: BEFORE SYNC)
+        # LOAD COGS
         # =====================================================
         extensions = [
             "cogs.music",
@@ -100,13 +106,23 @@ class Bot(commands.Bot):
                 self.logger.error(f"Failed to load {ext}: {e}")
 
         # =====================================================
-        # SLASH COMMAND SYNC (FIXED LOCATION)
+        # SLASH COMMAND SYNC (GUILD + GLOBAL HYBRID)
         # =====================================================
+
+        # 1. Global sync (fallback, slow propagation but universal)
         try:
-            synced = await self.tree.sync()
-            self.logger.info(f"Synced {len(synced)} slash commands")
+            synced_global = await self.tree.sync()
+            self.logger.info(f"Global sync: {len(synced_global)} commands")
         except Exception as e:
-            self.logger.error(f"Slash sync failed: {e}")
+            self.logger.error(f"Global sync failed: {e}")
+
+        # 2. Guild sync (instant updates per server)
+        for guild in self.guilds:
+            try:
+                synced = await self.tree.sync(guild=discord.Object(id=guild.id))
+                self.logger.info(f"Guild sync {guild.name}: {len(synced)} commands")
+            except Exception as e:
+                self.logger.error(f"Guild sync failed {guild.id}: {e}")
 
         # =====================================================
         # TASKS
@@ -118,26 +134,4 @@ class Bot(commands.Bot):
     # CLEANUP LOOP
     # =====================================================
     @tasks.loop(minutes=10)
-    async def cleanup_task(self):
-        try:
-            cleanup_managers(timeout=3600)
-            self.logger.info("Cleanup task executed")
-        except Exception as e:
-            self.logger.error(f"Cleanup error: {e}")
-
-    # =====================================================
-    # PREFIX COMMAND HANDLING
-    # =====================================================
-    async def on_message(self, message: discord.Message):
-        if message.author.bot:
-            return
-
-        await self.process_commands(message)
-
-
-# =====================================================
-# RUN BOT
-# =====================================================
-if __name__ == "__main__":
-    bot = Bot()
-    bot.run(TOKEN)
+    async def cleanup
