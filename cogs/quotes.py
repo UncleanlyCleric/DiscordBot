@@ -5,6 +5,9 @@ from discord import app_commands
 from utils.db import add, fetch_random, search, delete, edit, init
 
 
+# =====================================================
+# 🎯 QUOTES COG
+# =====================================================
 class Quotes(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -19,20 +22,27 @@ class Quotes(commands.Cog):
             return
         self._initialized = True
 
-        await init()
+        try:
+            await init()
+            print("[QUOTES] DB initialized")
+        except Exception as e:
+            print("[QUOTES] DB init failed:", e)
 
     # =====================================================
-    # RAW MESSAGE ROUTER (CALLED FROM BOT)
+    # RAW MESSAGE ROUTER (!add<cat>, !<cat>)
     # =====================================================
     async def handle_raw_message(self, message: discord.Message):
+        if not message.guild:
+            return
+
         content = message.content.strip()
 
-        # -------------------------
-        # !add<category> text
-        # -------------------------
+        # -------------------------------------------------
+        # ➕ ADD QUOTE: !add<category> <text>
+        # -------------------------------------------------
         if content.startswith("!add"):
             try:
-                raw = content[4:]
+                raw = content[4:].strip()
                 category, text = raw.split(" ", 1)
 
                 await add(
@@ -47,19 +57,22 @@ class Quotes(commands.Cog):
                 await message.channel.send("Usage: `!add<category> <text>`")
             return
 
-        # -------------------------
-        # !<category>
-        # -------------------------
+        # -------------------------------------------------
+        # 💬 GET QUOTE: !<category>
+        # -------------------------------------------------
         if content.startswith("!") and len(content) > 1:
             category = content[1:].strip().lower()
 
             if " " in category:
                 return
 
-            result = await fetch_random(message.guild.id, category)
+            try:
+                result = await fetch_random(message.guild.id, category)
 
-            if result:
-                await message.channel.send(f"💬 {result}")
+                if result:
+                    await message.channel.send(f"💬 {result}")
+            except Exception as e:
+                print("[DB] FETCH ERROR:", e)
 
     # =====================================================
     # PREFIX COMMANDS
@@ -85,9 +98,12 @@ class Quotes(commands.Cog):
         await ctx.send("✏️ Updated" if ok else "Not found")
 
     # =====================================================
-    # SLASH COMMANDS
+    # SLASH COMMAND GROUP (/quote)
     # =====================================================
-    quote = app_commands.Group(name="quote", description="Quote system")
+    quote = app_commands.Group(
+        name="quote",
+        description="Quote system"
+    )
 
     @quote.command(name="add")
     async def slash_add(self, interaction: discord.Interaction, category: str, content: str):
@@ -98,14 +114,17 @@ class Quotes(commands.Cog):
             str(interaction.user.id)
         )
 
-        await interaction.response.send_message("✅ Added", ephemeral=True)
+        await interaction.response.send_message("✅ Quote added.", ephemeral=True)
 
     @quote.command(name="get")
     async def slash_get(self, interaction: discord.Interaction, category: str):
         result = await fetch_random(interaction.guild.id, category)
 
         if not result:
-            return await interaction.response.send_message("No quotes", ephemeral=True)
+            return await interaction.response.send_message(
+                "No quotes found.",
+                ephemeral=True
+            )
 
         await interaction.response.send_message(f"💬 {result}")
 
@@ -113,11 +132,18 @@ class Quotes(commands.Cog):
     async def slash_search(self, interaction: discord.Interaction, query: str):
         results = await search(interaction.guild.id, query)
 
-        msg = "\n".join([f"`{r[0]}` [{r[1]}] {r[2]}" for r in results[:10]])
+        if not results:
+            return await interaction.response.send_message(
+                "No matches found.",
+                ephemeral=True
+            )
 
+        msg = "\n".join([f"`{r[0]}` [{r[1]}] {r[2]}" for r in results[:10]])
         await interaction.response.send_message(msg, ephemeral=True)
 
 
+# =====================================================
+# BOT SETUP
+# =====================================================
 async def setup(bot: commands.Bot):
     await bot.add_cog(Quotes(bot))
-    bot.tree.add_command(Quotes.quote)
