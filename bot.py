@@ -3,8 +3,11 @@ import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 import wavelink
+import logging
 
 from music.registry import cleanup_managers
+from utils.logger import setup_logger
+
 
 load_dotenv()
 
@@ -16,23 +19,27 @@ LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
 # ---------------- INTENTS ----------------
 intents = discord.Intents.default()
 intents.guilds = True
-intents.guild_messages = True
 intents.message_content = True
 intents.voice_states = True
 
 
-# ---------------- BOT ----------------
+# =====================================================
+# BOT
+# =====================================================
 class Bot(commands.Bot):
     def __init__(self):
         super().__init__(
-            command_prefix="!",  # only used for quotes
+            command_prefix="!",
             intents=intents,
             help_command=None
         )
 
+        # 🔥 LOGGER ATTACHED HERE
+        self.logger = setup_logger()
+
     # ---------------- STARTUP ----------------
     async def setup_hook(self):
-        print("Starting setup_hook...")
+        self.logger.info("Starting setup_hook...")
 
         if not TOKEN:
             raise RuntimeError("Missing DISCORD_TOKEN")
@@ -41,7 +48,7 @@ class Bot(commands.Bot):
             raise RuntimeError("Missing Lavalink config")
 
         # ---- Lavalink ----
-        print("Connecting to Lavalink...")
+        self.logger.info("Connecting to Lavalink...")
 
         nodes = [
             wavelink.Node(
@@ -52,47 +59,49 @@ class Bot(commands.Bot):
 
         await wavelink.Pool.connect(nodes=nodes, client=self)
 
-        print("Lavalink connected")
+        self.logger.info("Lavalink connected")
 
         # ---- cogs ----
         extensions = [
             "cogs.music",
             "cogs.quotes",
             "cogs.admin",
-            "cogs.dice"
+            "cogs.dice",
+            "cogs.help",
+            "cogs.core_logging"
         ]
 
         for ext in extensions:
             try:
                 await self.load_extension(ext)
-                print(f"Loaded {ext}")
+                self.logger.info(f"Loaded {ext}")
             except Exception as e:
-                print(f"Failed {ext}: {e}")
+                self.logger.error(f"Failed to load {ext}: {e}")
 
         # ---- cleanup task ----
         self.cleanup_task.start()
 
-        print("setup_hook complete")
+        self.logger.info("setup_hook complete")
 
     # ---------------- CLEANUP LOOP ----------------
     @tasks.loop(minutes=10)
     async def cleanup_task(self):
         try:
             cleanup_managers(timeout=3600)
+            self.logger.info("Cleanup task executed")
         except Exception as e:
-            print(f"Cleanup error: {e}")
+            self.logger.error(f"Cleanup error: {e}")
 
     # ---------------- PREFIX RESTRICTION ----------------
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
 
-        # ONLY allow !quote commands
         if message.content.startswith("!"):
             cmd = message.content.split(" ")[0][1:]
 
             if not cmd.startswith("quote"):
-                return  # block everything else
+                return
 
         await self.process_commands(message)
 
@@ -100,12 +109,12 @@ class Bot(commands.Bot):
     async def on_ready(self):
         try:
             synced = await self.tree.sync()
-            print(f"Synced {len(synced)} slash commands")
+            self.logger.info(f"Synced {len(synced)} slash commands")
         except Exception as e:
-            print(f"Slash sync failed: {e}")
+            self.logger.error(f"Slash sync failed: {e}")
 
-        print(f"\nLogged in as {self.user} (ID: {self.user.id})")
-        print("Bot ready.\n")
+        self.logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
+        self.logger.info("Bot ready.")
 
 
 # ---------------- RUN ----------------
