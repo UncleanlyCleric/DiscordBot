@@ -14,23 +14,33 @@ from utils.db import (
 class Quotes(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self._ready = False
 
     # ---------------- INIT ----------------
     @commands.Cog.listener()
     async def on_ready(self):
+        if self._ready:
+            return
+        self._ready = True
         await init()
 
     # ---------------- ADD ----------------
-    @commands.hybrid_command(name="quote_add")
+    @commands.hybrid_command(
+        name="quote_add",
+        description="Add a quote to a category"
+    )
     async def quote_add(self, ctx, category: str, *, content: str):
         if not ctx.guild:
             return await ctx.send("Servers only.")
 
-        await add(ctx.guild.id, category, content, str(ctx.author))
+        await add(ctx.guild.id, category, content, str(ctx.author.id))
         await ctx.send(f"Saved to `{category}`")
 
     # ---------------- RANDOM QUOTE ----------------
-    @commands.hybrid_command(name="quote")
+    @commands.hybrid_command(
+        name="quote",
+        description="Get a random quote from a category"
+    )
     async def quote(self, ctx, category: str):
         if not ctx.guild:
             return await ctx.send("Servers only.")
@@ -38,7 +48,7 @@ class Quotes(commands.Cog):
         quote = await fetch_random(ctx.guild.id, category)
 
         if not quote:
-            return await ctx.send("No quotes found.")
+            return await ctx.send(f"No quotes found in `{category}`.")
 
         embed = discord.Embed(
             title=f"Quote - {category}",
@@ -49,7 +59,10 @@ class Quotes(commands.Cog):
         await ctx.send(embed=embed)
 
     # ---------------- SEARCH ----------------
-    @commands.hybrid_command(name="quote_search")
+    @commands.hybrid_command(
+        name="quote_search",
+        description="Search quotes by keyword"
+    )
     async def quote_search(self, ctx, *, query: str):
         if not ctx.guild:
             return await ctx.send("Servers only.")
@@ -64,7 +77,7 @@ class Quotes(commands.Cog):
             color=discord.Color.green()
         )
 
-        for qid, category, content in results:
+        for qid, category, content in results[:25]:
             embed.add_field(
                 name=f"[{qid}] {category}",
                 value=content[:100],
@@ -74,21 +87,35 @@ class Quotes(commands.Cog):
         await ctx.send(embed=embed)
 
     # ---------------- DELETE ----------------
-    @commands.hybrid_command(name="quote_delete")
+    @commands.hybrid_command(
+        name="quote_delete",
+        description="Delete a quote by ID"
+    )
     async def quote_delete(self, ctx, quote_id: int):
         if not ctx.guild:
             return await ctx.send("Servers only.")
 
-        await delete(quote_id, ctx.guild.id)
+        result = await delete(quote_id, ctx.guild.id)
+
+        if not result:
+            return await ctx.send("Quote not found.")
+
         await ctx.send(f"Deleted quote `{quote_id}`")
 
     # ---------------- EDIT ----------------
-    @commands.hybrid_command(name="quote_edit")
+    @commands.hybrid_command(
+        name="quote_edit",
+        description="Edit an existing quote"
+    )
     async def quote_edit(self, ctx, quote_id: int, *, new_content: str):
         if not ctx.guild:
             return await ctx.send("Servers only.")
 
-        await edit(quote_id, ctx.guild.id, new_content)
+        result = await edit(quote_id, ctx.guild.id, new_content)
+
+        if not result:
+            return await ctx.send("Quote not found.")
+
         await ctx.send(f"Updated quote `{quote_id}`")
 
 
