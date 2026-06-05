@@ -1,98 +1,127 @@
-import aiosqlite
+import json
 import os
-from pathlib import Path
+import asyncio
 
-DB = Path(
-    os.getenv(
-        "QUOTES_DB_PATH",
-        Path(__file__).resolve().parent.parent / "quotes.db"
-    )
-)
+FILE_PATH = "quotes.json"
+
+_lock = asyncio.Lock()
+
+
+# ---------------- INTERNAL ----------------
+def _ensure_file():
+    if not os.path.exists(FILE_PATH):
+        with open(FILE_PATH, "w", encoding="utf-8") as f:
+            json.dump({}, f, indent=4)
+
+
+def _read():
+    _ensure_file()
+
+    with open(FILE_PATH, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return {}
+
+
+def _write(data):
+    with open(FILE_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
 
 
 # ---------------- INIT ----------------
 async def init():
-    DB.parent.mkdir(parents=True, exist_ok=True)
-
-    async with aiosqlite.connect(str(DB)) as db:
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS quotes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            guild_id INTEGER,
-            category TEXT,
-            content TEXT,
-            author TEXT
-        )
-        """)
-        await db.commit()
+    _ensure_file()
 
 
 # ---------------- ADD ----------------
-async def add(gid, cat, content, author):
-    async with aiosqlite.connect(str(DB)) as db:
-        await db.execute(
-            "INSERT INTO quotes (guild_id, category, content, author) VALUES (?, ?, ?, ?)",
-            (gid, cat, content, author)
-        )
-        await db.commit()
+async def add(guild_id: int, category: str, content: str, author_id: str):
+    async with _lock:
+        data = _read()
+
+        guild = data.setdefault(str(guild_id), {})
+        cat = guild.setdefault(category.lower(), [])
+
+        quote_id = sum(len(v) for v in guild.values()) + 1
+
+        cat.append({
+            "id": quote_id,
+            "content": content,
+            "author": author_id
+        })
+
+        _write(data)
 
 
-# ---------------- RANDOM (IMPROVED) ----------------
-async def fetch_random(gid, cat):
-    async with aiosqlite.connect(str(DB)) as db:
-        async with db.execute(
-            """
-            SELECT id, content, category, author
-            FROM quotes
-            WHERE guild_id = ? AND category = ?
-            ORDER BY RANDOM()
-            LIMIT 1
-            """,
-            (gid, cat)
-        ) as cur:
-            row = await cur.fetchone()
+# ---------------- RANDOM ----------------
+async def fetch_random(guild_id: int, category: str):
+    import random
 
-    return row  # (id, content, category, author)
+    data = _read()
+    guild = data.get(str(guild_id), {})
+    cat = guild.get(category.lower(), [])
+
+    if not cat:
+        return None
+
+    return random.choice(cat)["content"]
 
 
 # ---------------- SEARCH ----------------
-async def search(gid, query):
-    async with aiosqlite.connect(str(DB)) as db:
-        async with db.execute(
-            """
-            SELECT id, category, content, author
-            FROM quotes
-            WHERE guild_id = ?
-            AND content LIKE ?
-            ORDER BY id DESC
-            LIMIT 10
-            """,
-            (gid, f"%{query}%")
-        ) as cur:
-            return await cur.fetchall()
+async def search(guild_id: int, query: str):
+    data = _read()
+    guild = data.get(str(guild_id), {})
+
+    results = []
+
+    for category, quotes in guild.items():
+        for q in quotes:
+            if query.lower() in q["content"].lower():
+                results.append((q["id"], category, q["content"]))
+
+    return results
 
 
-# ---------------- DELETE (NOW RETURNS SUCCESS) ----------------
-async def delete(quote_id, gid):
-    async with aiosqlite.connect(str(DB)) as db:
-        cur = await db.execute(
-            "DELETE FROM quotes WHERE id = ? AND guild_id = ?",
-            (quote_id, gid)
-        )
-        await db.commit()
-        return cur.rowcount > 0
+# ---------------- DELETE ----------------
+async def delete(quote_id: int, guild_id: int):
+    async with _lock:
+        data = _read()
+        guild = data.get(str(guild_id), {})
+
+        found = False
+
+        for category in guild:
+            new_list = []
+
+            for q in guild[category]:
+                if q["id"] == quote_id:
+                    found = True
+                    continue
+                new_list.append(q)
+
+            guild[category] = new_list
+
+        if found:
+            _write(data)
+
+        return found
 
 
-# ---------------- EDIT (NOW RETURNS SUCCESS) ----------------
-async def edit(quote_id, gid, new_content):
-    async with aiosqlite.connect(str(DB)) as db:
-        cur = await db.execute(
-            """
-            UPDATE quotes
-            SET content = ?
-            WHERE id = ? AND guild_id = ?
-            """,
-            (new_content, quote_id, gid)
-        )
-        await db.commit()
-        return cur.rowcount > 0
+# ---------------- EDIT ----------------
+async def edit(quote_id: int, guild_id: int, new_content: str):
+    async with _lock:
+        data = _read()
+        guild = data.get(str(guild_id), {})
+
+        found = False
+
+        for category in guild:
+            for q in guild[category]:
+                if q["id"] == quote_id:
+                    q["content"] = new_content
+                    found = True
+
+        if found:
+            _write(data)
+
+        return found
