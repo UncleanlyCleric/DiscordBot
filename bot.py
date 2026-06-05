@@ -39,19 +39,10 @@ class Bot(commands.Bot):
         self.logger = setup_logger()
 
     # =====================================================
-    # HELPER: GET GUILD OBJECTS
-    # =====================================================
-    def get_guild_objects(self):
-        return [discord.Object(id=g.id) for g in self.guilds]
-
-    # =====================================================
-    # STARTUP
+    # STARTUP HOOK
     # =====================================================
     async def setup_hook(self):
         self.logger.info("Starting setup_hook...")
-
-        self.logger.info(f"Lavalink URI: {LAVALINK_URI}")
-        self.logger.info(f"Lavalink password set: {bool(LAVALINK_PASSWORD)}")
 
         if not TOKEN:
             raise RuntimeError("Missing DISCORD_TOKEN")
@@ -59,9 +50,7 @@ class Bot(commands.Bot):
         if not LAVALINK_URI or not LAVALINK_PASSWORD:
             raise RuntimeError("Missing Lavalink config")
 
-        # =====================================================
-        # DATABASE INIT
-        # =====================================================
+        # ---------------- DB ----------------
         try:
             await init_db()
             self.logger.info("SQLite initialized")
@@ -69,26 +58,23 @@ class Bot(commands.Bot):
             self.logger.error(f"DB init failed: {e}")
             raise
 
-        # =====================================================
-        # LAVALINK CONNECT
-        # =====================================================
-        self.logger.info("Connecting to Lavalink...")
+        # ---------------- LAVALINK ----------------
+        try:
+            await wavelink.Pool.connect(
+                nodes=[
+                    wavelink.Node(
+                        uri=LAVALINK_URI,
+                        password=LAVALINK_PASSWORD
+                    )
+                ],
+                client=self
+            )
+            self.logger.info("Lavalink connected")
+        except Exception as e:
+            self.logger.error(f"Lavalink failed: {e}")
+            raise
 
-        await wavelink.Pool.connect(
-            nodes=[
-                wavelink.Node(
-                    uri=LAVALINK_URI,
-                    password=LAVALINK_PASSWORD
-                )
-            ],
-            client=self
-        )
-
-        self.logger.info("Lavalink connected")
-
-        # =====================================================
-        # LOAD COGS
-        # =====================================================
+        # ---------------- COGS ----------------
         extensions = [
             "cogs.music",
             "cogs.quotes",
@@ -103,32 +89,45 @@ class Bot(commands.Bot):
                 await self.load_extension(ext)
                 self.logger.info(f"Loaded {ext}")
             except Exception as e:
+                # IMPORTANT: don't crash bot if one cog fails
                 self.logger.error(f"Failed to load {ext}: {e}")
 
-        # =====================================================
-        # SLASH COMMAND SYNC (GUILD + GLOBAL HYBRID)
-        # =====================================================
-
-        # 1. Global sync (fallback, slow propagation but universal)
+        # ---------------- SLASH SYNC ----------------
         try:
-            synced_global = await self.tree.sync()
-            self.logger.info(f"Global sync: {len(synced_global)} commands")
+            synced = await self.tree.sync()
+            self.logger.info(f"Global slash sync: {len(synced)} commands")
         except Exception as e:
             self.logger.error(f"Global sync failed: {e}")
 
-        # 2. Guild sync (instant updates per server)
         for guild in self.guilds:
             try:
-                synced = await self.tree.sync(guild=discord.Object(id=guild.id))
-                self.logger.info(f"Guild sync {guild.name}: {len(synced)} commands")
+                synced = await self.tree.sync(
+                    guild=discord.Object(id=guild.id)
+                )
+                self.logger.info(
+                    f"Guild sync {guild.name}: {len(synced)} commands"
+                )
             except Exception as e:
                 self.logger.error(f"Guild sync failed {guild.id}: {e}")
 
-        # =====================================================
-        # TASKS
-        # =====================================================
+        # ---------------- TASKS ----------------
         self.cleanup_task.start()
         self.logger.info("setup_hook complete")
+
+    # =====================================================
+    # READY EVENT
+    # =====================================================
+    async def on_ready(self):
+        self.logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
+
+    # =====================================================
+    # PREFIX COMMANDS SUPPORT
+    # =====================================================
+    async def on_message(self, message: discord.Message):
+        if message.author.bot:
+            return
+
+        await self.process_commands(message)
 
     # =====================================================
     # CLEANUP LOOP
@@ -140,3 +139,24 @@ class Bot(commands.Bot):
             self.logger.info("Cleanup task executed")
         except Exception as e:
             self.logger.error(f"Cleanup error: {e}")
+
+    # =====================================================
+    # SAFE SHUTDOWN
+    # =====================================================
+    async def close(self):
+        self.logger.info("Bot shutting down...")
+        await super().close()
+
+
+# =====================================================
+# ENTRYPOINT (CRITICAL - PREVENTS EXIT LOOP)
+# =====================================================
+if __name__ == "__main__":
+    print("RUNNING BOT...")
+
+    bot = Bot()
+
+    try:
+        bot.run(TOKEN)
+    except Exception as e:
+        print(f"BOT CRASHED: {e}")
