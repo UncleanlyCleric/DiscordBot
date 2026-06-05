@@ -18,7 +18,7 @@ services:
       - lavalink
 
     working_dir: /app
-    
+
     volumes:
       - ./data:/app/data
 
@@ -26,5 +26,7 @@ services:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - LAVALINK_URI=http://lavalink:8080
       - LAVALINK_PASSWORD=youshallnotpass
+
+    command: python bot.py   # 🔥 THIS IS THE FIX
 
     restart: unless-stopped
