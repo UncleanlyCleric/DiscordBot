@@ -11,14 +11,23 @@ services:
     restart: unless-stopped
 
   bot:
-    build: .
+    image: athene-bot:latest
     container_name: discord-bot
     depends_on:
       - lavalink
+
+    volumes:
+      - quotes_data:/data
+    working_dir: /app
 
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - LAVALINK_URI=http://lavalink:8080
       - LAVALINK_PASSWORD=youshallnotpass
+      - QUOTES_DB_PATH=/data/quotes.db
 
     restart: unless-stopped
+
+volumes:
+  quotes_data:
+    driver: local

@@ -1,9 +1,13 @@
 import aiosqlite
+import os
+from pathlib import Path
 
-DB = "quotes.db"
+DB = Path(os.getenv("QUOTES_DB_PATH", Path(__file__).resolve().parent.parent / "quotes.db"))
+
 
 async def init():
-    async with aiosqlite.connect(DB) as db:
+    DB.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(str(DB)) as db:
         await db.execute("""
         CREATE TABLE IF NOT EXISTS quotes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -17,20 +21,21 @@ async def init():
 
 
 async def add(gid, cat, content, author):
-    async with aiosqlite.connect(DB) as db:
+    DB.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(str(DB)) as db:
         await db.execute(
-            "INSERT INTO quotes VALUES (NULL, ?, ?, ?, ?)",
+            "INSERT INTO quotes (guild_id, category, content, author) VALUES (?, ?, ?, ?)",
             (gid, cat, content, author)
         )
         await db.commit()
 
 
 async def fetch_random(gid, cat):
-    async with aiosqlite.connect(DB) as db:
+    async with aiosqlite.connect(str(DB)) as db:
         async with db.execute(
-            "SELECT content FROM quotes WHERE guild_id=? AND category=?",
+            "SELECT content FROM quotes WHERE guild_id=? AND category=? ORDER BY RANDOM() LIMIT 1",
             (gid, cat)
         ) as cur:
-            rows = await cur.fetchall()
+            row = await cur.fetchone()
 
-    return rows
+    return row[0] if row else None

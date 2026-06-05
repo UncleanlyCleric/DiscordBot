@@ -9,6 +9,9 @@ Thumbs.db
 .env
 .env.*
 
+# Persistent database files
+quotes.db
+
 # Dependency directories
 node_modules/
 vendor/

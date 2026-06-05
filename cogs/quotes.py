@@ -20,13 +20,13 @@ class Quotes(commands.Cog):
     # ---------------- GET QUOTE ----------------
     @commands.hybrid_command(name="quote")
     async def quote(self, ctx, category: str):
-        rows = await fetch_random(ctx.guild.id, category)
+        quote = await fetch_random(ctx.guild.id, category)
 
-        if not rows:
+        if not quote:
             await ctx.send("No quotes found.")
             return
 
-        await ctx.send(random.choice(rows)[0])
+        await ctx.send(quote)
 
     # ---------------- PREFIX FALLBACK ----------------
     @commands.Cog.listener()
@@ -44,9 +44,9 @@ class Quotes(commands.Cog):
             await add(message.guild.id, cat, parts[1], str(message.author))
             await message.channel.send("Saved.")
         else:
-            rows = await fetch_random(message.guild.id, cat)
-            if rows:
-                await message.channel.send(random.choice(rows)[0])
+            quote = await fetch_random(message.guild.id, cat)
+            if quote:
+                await message.channel.send(quote)
 
 
 async def setup(bot):
