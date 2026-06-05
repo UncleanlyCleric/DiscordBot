@@ -1,123 +1,122 @@
-import discord
-from discord.ext import commands
+import json
+import os
+import random
+from typing import List, Optional, Tuple
 
-from utils.db import (
-    add,
-    fetch_random,
-    init,
-    search,
-    delete,
-    edit
-)
+FILE_PATH = "quotes.json"
 
 
-class Quotes(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        self._ready = False
+# ---------------- INTERNAL HELPERS ----------------
+def _load():
+    if not os.path.exists(FILE_PATH):
+        return {}
 
-    # ---------------- INIT ----------------
-    @commands.Cog.listener()
-    async def on_ready(self):
-        if self._ready:
-            return
-        self._ready = True
-        await init()
-
-    # ---------------- ADD ----------------
-    @commands.hybrid_command(
-        name="quote_add",
-        description="Add a quote to a category"
-    )
-    async def quote_add(self, ctx, category: str, *, content: str):
-        if not ctx.guild:
-            return await ctx.send("Servers only.")
-
-        await add(ctx.guild.id, category, content, str(ctx.author.id))
-        await ctx.send(f"Saved to `{category}`")
-
-    # ---------------- RANDOM QUOTE ----------------
-    @commands.hybrid_command(
-        name="quote",
-        description="Get a random quote from a category"
-    )
-    async def quote(self, ctx, category: str):
-        if not ctx.guild:
-            return await ctx.send("Servers only.")
-
-        quote = await fetch_random(ctx.guild.id, category)
-
-        if not quote:
-            return await ctx.send(f"No quotes found in `{category}`.")
-
-        embed = discord.Embed(
-            title=f"Quote - {category}",
-            description=quote,
-            color=discord.Color.blurple()
-        )
-
-        await ctx.send(embed=embed)
-
-    # ---------------- SEARCH ----------------
-    @commands.hybrid_command(
-        name="quote_search",
-        description="Search quotes by keyword"
-    )
-    async def quote_search(self, ctx, *, query: str):
-        if not ctx.guild:
-            return await ctx.send("Servers only.")
-
-        results = await search(ctx.guild.id, query)
-
-        if not results:
-            return await ctx.send("No matches found.")
-
-        embed = discord.Embed(
-            title=f"Search results for '{query}'",
-            color=discord.Color.green()
-        )
-
-        for qid, category, content in results[:25]:
-            embed.add_field(
-                name=f"[{qid}] {category}",
-                value=content[:100],
-                inline=False
-            )
-
-        await ctx.send(embed=embed)
-
-    # ---------------- DELETE ----------------
-    @commands.hybrid_command(
-        name="quote_delete",
-        description="Delete a quote by ID"
-    )
-    async def quote_delete(self, ctx, quote_id: int):
-        if not ctx.guild:
-            return await ctx.send("Servers only.")
-
-        result = await delete(quote_id, ctx.guild.id)
-
-        if not result:
-            return await ctx.send("Quote not found.")
-
-        await ctx.send(f"Deleted quote `{quote_id}`")
-
-    # ---------------- EDIT ----------------
-    @commands.hybrid_command(
-        name="quote_edit",
-        description="Edit an existing quote"
-    )
-    async def quote_edit(self, ctx, quote_id: int, *, new_content: str):
-        if not ctx.guild:
-            return await ctx.send("Servers only.")
-
-        result = await edit(quote_id, ctx.guild.id, new_content)
-
-        if not result:
-            return await ctx.send("Quote not found.")
-
-        await ctx.send(f"Updated quote `{quote_id}`")
+    try:
+        with open(FILE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        return {}
 
 
-async def setup(bot):
-    await bot.add_cog(Quotes(bot))
+def _save(data):
+    with open(FILE_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+
+# ---------------- INIT ----------------
+async def init():
+    if not os.path.exists(FILE_PATH):
+        _save({})
+
+
+# ---------------- ADD ----------------
+async def add(guild_id: int, category: str, content: str, author_id: str):
+    data = _load()
+
+    guild = data.setdefault(str(guild_id), {})
+    cat = guild.setdefault(category.lower(), [])
+
+    quote_id = sum(len(v) for v in guild.values()) + 1
+
+    cat.append({
+        "id": quote_id,
+        "content": content,
+        "author": author_id
+    })
+
+    _save(data)
+
+
+# ---------------- FETCH RANDOM ----------------
+async def fetch_random(guild_id: int, category: str) -> Optional[str]:
+    data = _load()
+
+    guild = data.get(str(guild_id), {})
+    cat = guild.get(category.lower(), [])
+
+    if not cat:
+        return None
+
+    q = random.choice(cat)
+    return q["content"]
+
+
+# ---------------- SEARCH ----------------
+async def search(guild_id: int, query: str) -> List[Tuple[int, str, str]]:
+    data = _load()
+
+    guild = data.get(str(guild_id), {})
+
+    results = []
+
+    for category, quotes in guild.items():
+        for q in quotes:
+            if query.lower() in q["content"].lower():
+                results.append((q["id"], category, q["content"]))
+
+    return results
+
+
+# ---------------- DELETE ----------------
+async def delete(quote_id: int, guild_id: int) -> bool:
+    data = _load()
+
+    guild = data.get(str(guild_id), {})
+
+    found = False
+
+    for category in list(guild.keys()):
+        new_list = []
+
+        for q in guild[category]:
+            if q["id"] == quote_id:
+                found = True
+                continue
+            new_list.append(q)
+
+        guild[category] = new_list
+
+    if found:
+        _save(data)
+
+    return found
+
+
+# ---------------- EDIT ----------------
+async def edit(quote_id: int, guild_id: int, new_content: str) -> bool:
+    data = _load()
+
+    guild = data.get(str(guild_id), {})
+
+    found = False
+
+    for category in guild:
+        for q in guild[category]:
+            if q["id"] == quote_id:
+                q["content"] = new_content
+                found = True
+
+    if found:
+        _save(data)
+
+    return found

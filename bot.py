@@ -3,11 +3,9 @@ import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 import wavelink
-import logging
 
 from music.registry import cleanup_managers
 from utils.logger import setup_logger
-
 
 load_dotenv()
 
@@ -34,7 +32,7 @@ class Bot(commands.Bot):
             help_command=None
         )
 
-        # 🔥 LOGGER ATTACHED HERE
+        # Logger
         self.logger = setup_logger()
 
     # ---------------- STARTUP ----------------
@@ -47,7 +45,7 @@ class Bot(commands.Bot):
         if not LAVALINK_URI or not LAVALINK_PASSWORD:
             raise RuntimeError("Missing Lavalink config")
 
-        # ---- Lavalink ----
+        # ---------------- LAVALINK ----------------
         self.logger.info("Connecting to Lavalink...")
 
         nodes = [
@@ -61,7 +59,7 @@ class Bot(commands.Bot):
 
         self.logger.info("Lavalink connected")
 
-        # ---- cogs ----
+        # ---------------- COGS ----------------
         extensions = [
             "cogs.music",
             "cogs.quotes",
@@ -78,7 +76,7 @@ class Bot(commands.Bot):
             except Exception as e:
                 self.logger.error(f"Failed to load {ext}: {e}")
 
-        # ---- cleanup task ----
+        # ---------------- CLEANUP TASK ----------------
         self.cleanup_task.start()
 
         self.logger.info("setup_hook complete")
@@ -92,16 +90,10 @@ class Bot(commands.Bot):
         except Exception as e:
             self.logger.error(f"Cleanup error: {e}")
 
-    # ---------------- PREFIX RESTRICTION ----------------
+    # ---------------- MESSAGE HANDLING ----------------
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
-
-        if message.content.startswith("!"):
-            cmd = message.content.split(" ")[0][1:]
-
-            if not cmd.startswith("quote"):
-                return
 
         await self.process_commands(message)
 
