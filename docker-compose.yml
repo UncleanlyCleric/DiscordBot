@@ -12,7 +12,7 @@ services:
     restart: unless-stopped
 
   bot:
-    image: athene-bot:latest
+    build: .
     container_name: discord-bot
     depends_on:
       - lavalink

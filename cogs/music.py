@@ -1,7 +1,11 @@
 import discord
 from discord.ext import commands
 import wavelink
+import os
+import random
+
 from collections import deque
+from utils.resolver import resolve_music
 
 
 # =====================================================
@@ -12,7 +16,11 @@ class GuildPlayer:
         self.queue = deque()
         self.history = deque(maxlen=50)
         self.current: wavelink.Playable | None = None
-        self.loop_mode = "off"  # off | track | queue
+        self.loop_mode = "off"
+
+        # 📻 RADIO MODE
+        self.radio_enabled = False
+        self.radio_seed = None
 
 
 players = {}
@@ -25,73 +33,32 @@ def get_player(guild_id: int) -> GuildPlayer:
 
 
 # =====================================================
-# 🎛 UI CONTROLS
-# =====================================================
-class MusicControls(discord.ui.View):
-    def __init__(self, ctx):
-        super().__init__(timeout=300)
-        self.ctx = ctx
-
-    async def interaction_check(self, interaction: discord.Interaction):
-        return interaction.user == self.ctx.author
-
-    @discord.ui.button(label="⏸", style=discord.ButtonStyle.gray)
-    async def pause(self, interaction, button):
-        vc = self.ctx.voice_client
-        if vc:
-            await vc.pause()
-        await interaction.response.defer()
-
-    @discord.ui.button(label="▶", style=discord.ButtonStyle.green)
-    async def resume(self, interaction, button):
-        vc = self.ctx.voice_client
-        if vc:
-            await vc.resume()
-        await interaction.response.defer()
-
-    @discord.ui.button(label="⏭", style=discord.ButtonStyle.blurple)
-    async def skip(self, interaction, button):
-        vc = self.ctx.voice_client
-        if vc:
-            await vc.stop()
-        await interaction.response.defer()
-
-    @discord.ui.button(label="⏹", style=discord.ButtonStyle.red)
-    async def stop(self, interaction, button):
-        vc = self.ctx.voice_client
-        player = get_player(self.ctx.guild.id)
-
-        player.queue.clear()
-        player.current = None
-
-        if vc:
-            await vc.disconnect()
-
-        await interaction.response.defer()
-
-
-# =====================================================
 # 🎧 MUSIC COG
 # =====================================================
 class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._lavalink_connected = False
 
     # -------------------------
-    # LAVALINK CONNECT
+    # LAVALINK CONNECT (SAFE)
     # -------------------------
     @commands.Cog.listener()
     async def on_ready(self):
-        if not wavelink.Pool.nodes:
-            await wavelink.Pool.connect(
-                client=self.bot,
-                nodes=[
-                    wavelink.Node(
-                        uri="http://localhost:2333",
-                        password="youshallnotpass"
-                    )
-                ]
-            )
+        if self._lavalink_connected:
+            return
+
+        self._lavalink_connected = True
+
+        await wavelink.Pool.connect(
+            client=self.bot,
+            nodes=[
+                wavelink.Node(
+                    uri=os.getenv("LAVALINK_URI"),
+                    password=os.getenv("LAVALINK_PASSWORD")
+                )
+            ]
+        )
 
     # -------------------------
     # TRACK END HANDLER
@@ -103,12 +70,12 @@ class Music(commands.Cog):
             await self.play_next(vc, vc.guild.id)
 
     # -------------------------
-    # CORE PLAYER ENGINE
+    # CORE ENGINE
     # -------------------------
     async def play_next(self, vc: wavelink.Player, guild_id: int):
         player = get_player(guild_id)
 
-        # loop current track
+        # loop track
         if player.loop_mode == "track" and player.current:
             await vc.play(player.current)
             return
@@ -117,23 +84,30 @@ class Music(commands.Cog):
         if player.loop_mode == "queue" and player.current:
             player.queue.append(player.current)
 
-        if not player.queue:
+        # normal queue
+        if player.queue:
+            next_track = player.queue.popleft()
+
+        # 📻 RADIO MODE
+        elif player.radio_enabled and player.radio_seed:
+            results = await wavelink.Playable.search(player.radio_seed)
+            if results:
+                next_track = random.choice(results[:5])
+            else:
+                return
+        else:
             player.current = None
             return
 
-        next_track = player.queue.popleft()
         player.current = next_track
         player.history.append(next_track)
 
         await vc.play(next_track)
 
     # =====================================================
-    # 🎵 PLAY
+    # 🎵 PLAY (UPDATED WITH RESOLVER)
     # =====================================================
-    @commands.hybrid_command(
-        name="play",
-        description="Play music or add to queue"
-    )
+    @commands.hybrid_command(name="play", description="Play music or add to queue")
     async def play(self, ctx: commands.Context, *, query: str):
 
         if not ctx.author.voice:
@@ -146,13 +120,15 @@ class Music(commands.Cog):
 
         player = get_player(ctx.guild.id)
 
+        # 🌐 resolve Spotify / Apple Music / normal query
+        query = await resolve_music(query)
+
         results = await wavelink.Playable.search(query)
 
         if not results:
             return await ctx.send("No results found.")
 
         track = results[0]
-
         player.queue.append(track)
 
         if not vc.playing:
@@ -164,55 +140,50 @@ class Music(commands.Cog):
             color=discord.Color.blurple()
         )
 
-        await ctx.send(embed=embed, view=MusicControls(ctx))
+        await ctx.send(embed=embed)
 
     # =====================================================
-    # ⏭ SKIP
+    # 📻 RADIO COMMAND
     # =====================================================
-    @commands.hybrid_command(
-        name="skip",
-        description="Skip current track"
-    )
-    async def skip(self, ctx: commands.Context):
+    @commands.hybrid_command(name="radio")
+    async def radio(self, ctx: commands.Context, *, query: str = None):
+
+        player = get_player(ctx.guild.id)
+
+        if query:
+            player.radio_seed = await resolve_music(query)
+            player.radio_enabled = True
+            await ctx.send(f"📻 Radio started from: `{query}`")
+        else:
+            player.radio_enabled = not player.radio_enabled
+            await ctx.send(f"📻 Radio: `{player.radio_enabled}`")
+
+    # =====================================================
+    # BASIC CONTROLS
+    # =====================================================
+    @commands.hybrid_command(name="skip")
+    async def skip(self, ctx):
         vc = ctx.voice_client
         if vc:
             await vc.stop()
         await ctx.send("⏭ Skipped")
 
-    # =====================================================
-    # ⏸ PAUSE
-    # =====================================================
-    @commands.hybrid_command(
-        name="pause",
-        description="Pause playback"
-    )
-    async def pause(self, ctx: commands.Context):
+    @commands.hybrid_command(name="pause")
+    async def pause(self, ctx):
         vc = ctx.voice_client
         if vc:
             await vc.pause()
         await ctx.send("⏸ Paused")
 
-    # =====================================================
-    # ▶ RESUME
-    # =====================================================
-    @commands.hybrid_command(
-        name="resume",
-        description="Resume playback"
-    )
-    async def resume(self, ctx: commands.Context):
+    @commands.hybrid_command(name="resume")
+    async def resume(self, ctx):
         vc = ctx.voice_client
         if vc:
             await vc.resume()
         await ctx.send("▶️ Resumed")
 
-    # =====================================================
-    # ⏹ STOP
-    # =====================================================
-    @commands.hybrid_command(
-        name="stop",
-        description="Stop music and clear queue"
-    )
-    async def stop(self, ctx: commands.Context):
+    @commands.hybrid_command(name="stop")
+    async def stop(self, ctx):
         vc = ctx.voice_client
         player = get_player(ctx.guild.id)
 
@@ -222,25 +193,7 @@ class Music(commands.Cog):
         if vc:
             await vc.disconnect()
 
-        await ctx.send("⏹ Stopped and cleared queue")
-
-    # =====================================================
-    # 🔁 LOOP
-    # =====================================================
-    @commands.hybrid_command(
-        name="loop",
-        description="Set loop mode: off, track, queue"
-    )
-    async def loop(self, ctx: commands.Context, mode: str):
-
-        player = get_player(ctx.guild.id)
-        mode = mode.lower()
-
-        if mode not in ("off", "track", "queue"):
-            return await ctx.send("Use: off, track, queue")
-
-        player.loop_mode = mode
-        await ctx.send(f"🔁 Loop set to `{mode}`")
+        await ctx.send("⏹ Stopped")
 
 
 async def setup(bot: commands.Bot):
