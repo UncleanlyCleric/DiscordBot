@@ -3,8 +3,8 @@ from discord.ext import commands
 import wavelink
 import os
 import random
-
 from collections import deque
+
 from utils.resolver import resolve_music
 
 
@@ -33,16 +33,16 @@ def get_player(guild_id: int) -> GuildPlayer:
 
 
 # =====================================================
-# 🎧 MUSIC COG
+# 🎧 MUSIC COG (SPOTIFY REMOVED)
 # =====================================================
 class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._lavalink_connected = False
 
-    # -------------------------
-    # LAVALINK CONNECT (SAFE)
-    # -------------------------
+    # =====================================================
+    # LAVALINK CONNECT (SAFE, ONCE ONLY)
+    # =====================================================
     @commands.Cog.listener()
     async def on_ready(self):
         if self._lavalink_connected:
@@ -50,28 +50,40 @@ class Music(commands.Cog):
 
         self._lavalink_connected = True
 
-        await wavelink.Pool.connect(
-            client=self.bot,
-            nodes=[
-                wavelink.Node(
-                    uri=os.getenv("LAVALINK_URI"),
-                    password=os.getenv("LAVALINK_PASSWORD")
-                )
-            ]
-        )
+        uri = os.getenv("LAVALINK_URI")
+        password = os.getenv("LAVALINK_PASSWORD")
 
-    # -------------------------
+        if not uri or not password:
+            print("[LAVALINK] Missing config - music disabled")
+            return
+
+        try:
+            await wavelink.Pool.connect(
+                client=self.bot,
+                nodes=[
+                    wavelink.Node(
+                        uri=uri,
+                        password=password
+                    )
+                ]
+            )
+            print("[LAVALINK] Connected successfully")
+
+        except Exception as e:
+            print("[LAVALINK] Connection failed:", e)
+
+    # =====================================================
     # TRACK END HANDLER
-    # -------------------------
+    # =====================================================
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload):
         vc = payload.player
         if vc:
             await self.play_next(vc, vc.guild.id)
 
-    # -------------------------
+    # =====================================================
     # CORE ENGINE
-    # -------------------------
+    # =====================================================
     async def play_next(self, vc: wavelink.Player, guild_id: int):
         player = get_player(guild_id)
 
@@ -105,7 +117,7 @@ class Music(commands.Cog):
         await vc.play(next_track)
 
     # =====================================================
-    # 🎵 PLAY (UPDATED WITH RESOLVER)
+    # 🎵 PLAY
     # =====================================================
     @commands.hybrid_command(name="play", description="Play music or add to queue")
     async def play(self, ctx: commands.Context, *, query: str):
@@ -120,7 +132,6 @@ class Music(commands.Cog):
 
         player = get_player(ctx.guild.id)
 
-        # 🌐 resolve Spotify / Apple Music / normal query
         query = await resolve_music(query)
 
         results = await wavelink.Playable.search(query)
@@ -143,7 +154,7 @@ class Music(commands.Cog):
         await ctx.send(embed=embed)
 
     # =====================================================
-    # 📻 RADIO COMMAND
+    # 📻 RADIO
     # =====================================================
     @commands.hybrid_command(name="radio")
     async def radio(self, ctx: commands.Context, *, query: str = None):
@@ -159,7 +170,7 @@ class Music(commands.Cog):
             await ctx.send(f"📻 Radio: `{player.radio_enabled}`")
 
     # =====================================================
-    # BASIC CONTROLS
+    # CONTROLS
     # =====================================================
     @commands.hybrid_command(name="skip")
     async def skip(self, ctx):
