@@ -1,13 +1,14 @@
 import json
 import os
 import asyncio
+import tempfile
 
 FILE_PATH = "quotes.json"
 
 _lock = asyncio.Lock()
 
 
-# ---------------- INTERNAL ----------------
+# ---------------- FILE SAFETY ----------------
 def _ensure_file():
     if not os.path.exists(FILE_PATH):
         with open(FILE_PATH, "w", encoding="utf-8") as f:
@@ -24,9 +25,30 @@ def _read():
             return {}
 
 
-def _write(data):
-    with open(FILE_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+def _atomic_write(data):
+    """
+    Writes JSON safely using atomic replace:
+    temp file → flush → fsync → os.replace
+    """
+    dir_name = os.path.dirname(FILE_PATH) or "."
+
+    fd, temp_path = tempfile.mkstemp(dir=dir_name, prefix="quotes_", suffix=".tmp")
+
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp:
+            json.dump(data, tmp, indent=4, ensure_ascii=False)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+
+        os.replace(temp_path, FILE_PATH)
+
+    except Exception:
+        # cleanup temp file if something fails
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
+        raise
 
 
 # ---------------- INIT ----------------
@@ -50,10 +72,10 @@ async def add(guild_id: int, category: str, content: str, author_id: str):
             "author": author_id
         })
 
-        _write(data)
+        _atomic_write(data)
 
 
-# ---------------- RANDOM ----------------
+# ---------------- FETCH RANDOM ----------------
 async def fetch_random(guild_id: int, category: str):
     import random
 
@@ -102,7 +124,7 @@ async def delete(quote_id: int, guild_id: int):
             guild[category] = new_list
 
         if found:
-            _write(data)
+            _atomic_write(data)
 
         return found
 
@@ -122,6 +144,6 @@ async def edit(quote_id: int, guild_id: int, new_content: str):
                     found = True
 
         if found:
-            _write(data)
+            _atomic_write(data)
 
         return found
