@@ -11,20 +11,18 @@ from utils.db import (
     edit
 )
 
-
 # =====================================================
-# 🎯 QUOTES COG (STABLE + NO DUPLICATE REGISTRATION)
+# 🎯 QUOTES COG (DYNAMIC PREFIX ROUTER VERSION)
 # =====================================================
 class Quotes(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     # =====================================================
-    # DB INIT (SAFE: ONLY ONCE PER PROCESS)
+    # DB INIT (RUN ONCE)
     # =====================================================
     @commands.Cog.listener()
     async def on_ready(self):
-        # safe guard: prevents repeated init on reconnects
         if getattr(self, "_initialized", False):
             return
 
@@ -37,7 +35,7 @@ class Quotes(commands.Cog):
             print("[QUOTES] DB init failed:", e)
 
     # =====================================================
-    # CORE HELPERS
+    # CORE DB HELPERS
     # =====================================================
     async def add_quote(self, guild_id, category, content, author_id):
         return await add(
@@ -51,37 +49,96 @@ class Quotes(commands.Cog):
         return await fetch_random(guild_id, category)
 
     # =====================================================
-    # PREFIX COMMANDS (!quote etc)
+    # 🚀 CUSTOM PREFIX ROUTER (!add<cat>, !<cat>)
     # =====================================================
-    @commands.command(name="addquote")
-    async def addquote_prefix(self, ctx: commands.Context, category: str, *, content: str):
-        if not ctx.guild:
-            return await ctx.send("Guild-only command.")
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author.bot:
+            return
 
-        try:
-            await self.add_quote(ctx.guild.id, category, content, ctx.author.id)
-            await ctx.send("✅ Quote added.")
-        except Exception as e:
-            print("[DB] INSERT FAILED:", e)
-            await ctx.send("❌ Failed to add quote.")
+        if not message.guild:
+            return
 
-    @commands.command(name="quote")
-    async def quote_prefix(self, ctx: commands.Context, category: str):
-        if not ctx.guild:
-            return await ctx.send("Guild-only command.")
+        content = message.content.strip()
 
-        try:
-            result = await self.get_quote(ctx.guild.id, category)
+        # -------------------------------------------------
+        # RESERVED COMMANDS 
+        # -------------------------------------------------
+        reserved = {
+            "help",
+            "ping",
+            "stats",
+            "quote",
+            "addquote",
+            "searchquote",
+            "delquote",
+            "editquote"
+        }
 
-            if not result:
-                return await ctx.send("No quotes found.")
+        # =================================================
+        # ➕ ADD QUOTE: !add<category> <text>
+        # =================================================
+        if content.startswith("!add"):
+            try:
+                after_prefix = content[4:]  # remove "!add"
+                parts = after_prefix.split(" ", 1)
 
-            await ctx.send(f"💬 {result}")
+                if len(parts) < 2:
+                    return await message.channel.send(
+                        "Usage: `!add<category> <text>`"
+                    )
 
-        except Exception as e:
-            print("[DB] FETCH FAILED:", e)
-            await ctx.send("❌ Error fetching quote.")
+                category = parts[0].strip().lower()
+                text = parts[1].strip()
 
+                if category in reserved:
+                    return await message.channel.send(
+                        "❌ That category is reserved."
+                    )
+
+                await self.add_quote(
+                    message.guild.id,
+                    category,
+                    text,
+                    message.author.id
+                )
+
+                await message.channel.send("✅ Quote added.")
+                return
+
+            except Exception as e:
+                print("[DB] ADD FAILED:", e)
+                await message.channel.send("❌ Failed to add quote.")
+                return
+
+        # =================================================
+        # 💬 GET QUOTE: !<category>
+        # =================================================
+        if content.startswith("!"):
+            try:
+                category = content[1:].strip().lower()
+
+                # ignore invalid usage like "! help"
+                if not category or " " in category:
+                    return
+
+                if category in reserved:
+                    return
+
+                result = await self.get_quote(message.guild.id, category)
+
+                if not result:
+                    return await message.channel.send("No quotes found.")
+
+                await message.channel.send(f"💬 {result}")
+
+            except Exception as e:
+                print("[DB] FETCH FAILED:", e)
+                await message.channel.send("❌ Error fetching quote.")
+
+    # =====================================================
+    # 🔎 PREFIX COMMANDS (still supported)
+    # =====================================================
     @commands.command(name="searchquote")
     async def searchquote_prefix(self, ctx: commands.Context, *, query: str):
         if not ctx.guild:
@@ -125,7 +182,7 @@ class Quotes(commands.Cog):
             await ctx.send("❌ Edit error.")
 
     # =====================================================
-    # SLASH COMMAND GROUP (/quote ...)
+    # 🌐 SLASH COMMAND GROUP (/quote)
     # =====================================================
     quote_group = app_commands.Group(
         name="quote",
@@ -216,8 +273,7 @@ class Quotes(commands.Cog):
 
 
 # =====================================================
-# IMPORTANT: NO TREE REGISTRATION HERE
-# (prevents CommandAlreadyRegistered)
+# BOT SETUP
 # =====================================================
 async def setup(bot: commands.Bot):
     await bot.add_cog(Quotes(bot))
