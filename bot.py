@@ -7,6 +7,9 @@ import wavelink
 from music.registry import cleanup_managers
 from utils.logger import setup_logger
 
+# ✅ SQLITE INIT IMPORT
+from utils.db import init as init_db
+
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -44,6 +47,13 @@ class Bot(commands.Bot):
 
         if not LAVALINK_URI or not LAVALINK_PASSWORD:
             raise RuntimeError("Missing Lavalink config")
+
+        # ---------------- SQLITE INIT (IMPORTANT FIX) ----------------
+        try:
+            await init_db()
+            self.logger.info("SQLite database initialized")
+        except Exception as e:
+            self.logger.error(f"DB init failed: {e}")
 
         # ---------------- LAVALINK ----------------
         self.logger.info("Connecting to Lavalink...")

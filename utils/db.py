@@ -1,84 +1,38 @@
-import json
-import os
+import sqlite3
 import asyncio
-import tempfile
+import random
+import os
 
 # -----------------------------------------------------
-# PATH SETUP (correct: project root)
+# DATABASE PATH (always project-root safe)
 # -----------------------------------------------------
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # utils/
-BASE_DIR = os.path.dirname(BASE_DIR)                    # project root
-
-FILE_PATH = os.path.join(BASE_DIR, "quotes.json")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "quotes.db")
 
 _lock = asyncio.Lock()
 
 
 # -----------------------------------------------------
-# FILE BOOTSTRAP (auto-create if missing or broken)
-# -----------------------------------------------------
-def _ensure_file():
-    os.makedirs(BASE_DIR, exist_ok=True)
-
-    if not os.path.exists(FILE_PATH):
-        _write({})
-        return
-
-    # If file exists but is invalid JSON → reset it
-    try:
-        with open(FILE_PATH, "r", encoding="utf-8") as f:
-            json.load(f)
-    except Exception:
-        _write({})
-
-
-# -----------------------------------------------------
-# READ
-# -----------------------------------------------------
-def _read():
-    _ensure_file()
-
-    with open(FILE_PATH, "r", encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return {}
-
-
-# -----------------------------------------------------
-# ATOMIC WRITE
-# -----------------------------------------------------
-def _write(data):
-    dir_name = os.path.dirname(FILE_PATH)
-
-    fd, temp_path = tempfile.mkstemp(
-        dir=dir_name,
-        prefix="quotes_",
-        suffix=".tmp"
-    )
-
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as tmp:
-            json.dump(data, tmp, indent=4, ensure_ascii=False)
-            tmp.flush()
-            os.fsync(tmp.fileno())
-
-        os.replace(temp_path, FILE_PATH)
-
-    except Exception:
-        try:
-            os.remove(temp_path)
-        except Exception:
-            pass
-        raise
-
-
-# -----------------------------------------------------
-# INIT (called on bot startup)
+# INIT
 # -----------------------------------------------------
 async def init():
-    _ensure_file()
+    async with _lock:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS quotes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            category TEXT NOT NULL,
+            content TEXT NOT NULL,
+            author TEXT NOT NULL
+        )
+        """)
+
+        conn.commit()
+        conn.close()
 
 
 # -----------------------------------------------------
@@ -86,51 +40,54 @@ async def init():
 # -----------------------------------------------------
 async def add(guild_id: int, category: str, content: str, author_id: str):
     async with _lock:
-        data = _read()
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
 
-        guild = data.setdefault(str(guild_id), {})
-        cat = guild.setdefault(category.lower(), [])
+        c.execute("""
+            INSERT INTO quotes (guild_id, category, content, author)
+            VALUES (?, ?, ?, ?)
+        """, (str(guild_id), category.lower(), content, author_id))
 
-        quote_id = sum(len(v) for v in guild.values()) + 1
-
-        cat.append({
-            "id": quote_id,
-            "content": content,
-            "author": author_id
-        })
-
-        _write(data)
+        conn.commit()
+        conn.close()
 
 
 # -----------------------------------------------------
-# RANDOM QUOTE
+# FETCH RANDOM
 # -----------------------------------------------------
 async def fetch_random(guild_id: int, category: str):
-    import random
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
 
-    data = _read()
-    guild = data.get(str(guild_id), {})
-    cat = guild.get(category.lower(), [])
+    c.execute("""
+        SELECT content FROM quotes
+        WHERE guild_id = ? AND category = ?
+    """, (str(guild_id), category.lower()))
 
-    if not cat:
+    rows = c.fetchall()
+    conn.close()
+
+    if not rows:
         return None
 
-    return random.choice(cat)["content"]
+    return random.choice(rows)[0]
 
 
 # -----------------------------------------------------
 # SEARCH
 # -----------------------------------------------------
 async def search(guild_id: int, query: str):
-    data = _read()
-    guild = data.get(str(guild_id), {})
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
 
-    results = []
+    c.execute("""
+        SELECT id, category, content
+        FROM quotes
+        WHERE guild_id = ? AND content LIKE ?
+    """, (str(guild_id), f"%{query}%"))
 
-    for category, quotes in guild.items():
-        for q in quotes:
-            if query.lower() in q["content"].lower():
-                results.append((q["id"], category, q["content"]))
+    results = c.fetchall()
+    conn.close()
 
     return results
 
@@ -140,26 +97,20 @@ async def search(guild_id: int, query: str):
 # -----------------------------------------------------
 async def delete(quote_id: int, guild_id: int):
     async with _lock:
-        data = _read()
-        guild = data.get(str(guild_id), {})
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
 
-        found = False
+        c.execute("""
+            DELETE FROM quotes
+            WHERE id = ? AND guild_id = ?
+        """, (quote_id, str(guild_id)))
 
-        for category in guild:
-            new_list = []
+        deleted = c.rowcount > 0
 
-            for q in guild[category]:
-                if q["id"] == quote_id:
-                    found = True
-                    continue
-                new_list.append(q)
+        conn.commit()
+        conn.close()
 
-            guild[category] = new_list
-
-        if found:
-            _write(data)
-
-        return found
+        return deleted
 
 
 # -----------------------------------------------------
@@ -167,18 +118,18 @@ async def delete(quote_id: int, guild_id: int):
 # -----------------------------------------------------
 async def edit(quote_id: int, guild_id: int, new_content: str):
     async with _lock:
-        data = _read()
-        guild = data.get(str(guild_id), {})
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
 
-        found = False
+        c.execute("""
+            UPDATE quotes
+            SET content = ?
+            WHERE id = ? AND guild_id = ?
+        """, (new_content, quote_id, str(guild_id)))
 
-        for category in guild:
-            for q in guild[category]:
-                if q["id"] == quote_id:
-                    q["content"] = new_content
-                    found = True
+        updated = c.rowcount > 0
 
-        if found:
-            _write(data)
+        conn.commit()
+        conn.close()
 
-        return found
+        return updated
