@@ -4,13 +4,15 @@ import random
 import os
 
 # -----------------------------------------------------
-# DATABASE PATH (always project-root safe)
+# DATA DIRECTORY ARCHITECTURE
 # -----------------------------------------------------
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(BASE_DIR, "quotes.db")
 
-_lock = asyncio.Lock()
+DATA_DIR = os.path.join(BASE_DIR, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+DB_PATH = os.path.join(DATA_DIR, "quotes.db")
 
 
 # -----------------------------------------------------
