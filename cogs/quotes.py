@@ -13,14 +13,31 @@ from utils.db import (
 
 
 # =====================================================
-# 🎯 QUOTES COG (STABLE VERSION)
+# 🎯 QUOTES COG (STABLE + NO DUPLICATE REGISTRATION)
 # =====================================================
 class Quotes(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     # =====================================================
-    # SHARED HELPERS
+    # DB INIT (SAFE: ONLY ONCE PER PROCESS)
+    # =====================================================
+    @commands.Cog.listener()
+    async def on_ready(self):
+        # safe guard: prevents repeated init on reconnects
+        if getattr(self, "_initialized", False):
+            return
+
+        self._initialized = True
+
+        try:
+            await init()
+            print("[QUOTES] DB initialized successfully")
+        except Exception as e:
+            print("[QUOTES] DB init failed:", e)
+
+    # =====================================================
+    # CORE HELPERS
     # =====================================================
     async def add_quote(self, guild_id, category, content, author_id):
         return await add(
@@ -34,7 +51,7 @@ class Quotes(commands.Cog):
         return await fetch_random(guild_id, category)
 
     # =====================================================
-    # PREFIX COMMANDS
+    # PREFIX COMMANDS (!quote etc)
     # =====================================================
     @commands.command(name="addquote")
     async def addquote_prefix(self, ctx: commands.Context, category: str, *, content: str):
@@ -116,12 +133,7 @@ class Quotes(commands.Cog):
     )
 
     @quote_group.command(name="add", description="Add a quote")
-    async def quote_add(
-        self,
-        interaction: discord.Interaction,
-        category: str,
-        content: str
-    ):
+    async def quote_add(self, interaction: discord.Interaction, category: str, content: str):
         if interaction.guild is None:
             return await interaction.response.send_message(
                 "Guild-only command.",
@@ -149,11 +161,7 @@ class Quotes(commands.Cog):
             )
 
     @quote_group.command(name="get", description="Get a random quote")
-    async def quote_get(
-        self,
-        interaction: discord.Interaction,
-        category: str
-    ):
+    async def quote_get(self, interaction: discord.Interaction, category: str):
         if interaction.guild is None:
             return await interaction.response.send_message(
                 "Guild-only command.",
@@ -179,11 +187,7 @@ class Quotes(commands.Cog):
             )
 
     @quote_group.command(name="search", description="Search quotes")
-    async def quote_search(
-        self,
-        interaction: discord.Interaction,
-        query: str
-    ):
+    async def quote_search(self, interaction: discord.Interaction, query: str):
         if interaction.guild is None:
             return await interaction.response.send_message(
                 "Guild-only command.",
@@ -212,11 +216,8 @@ class Quotes(commands.Cog):
 
 
 # =====================================================
-# CLEAN SETUP (IMPORTANT)
+# IMPORTANT: NO TREE REGISTRATION HERE
+# (prevents CommandAlreadyRegistered)
 # =====================================================
 async def setup(bot: commands.Bot):
-    cog = Quotes(bot)
-    await bot.add_cog(cog)
-
-    # Register slash group ONCE (safe)
-    bot.tree.add_command(cog.quote_group)
+    await bot.add_cog(Quotes(bot))
