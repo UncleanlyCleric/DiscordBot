@@ -52,7 +52,7 @@ class Bot(commands.Bot):
             raise RuntimeError("Missing Lavalink config")
 
         # =====================================================
-        # SQLITE INIT (MUST RUN FIRST)
+        # SQLITE INIT
         # =====================================================
         try:
             await init_db()
@@ -122,14 +122,17 @@ class Bot(commands.Bot):
     # ---------------- READY EVENT ----------------
     async def on_ready(self):
         try:
-            self.tree.clear_commands(guild=None)
             synced = await self.tree.sync()
 
-            self.logger.info(f"Synced {len(synced)} slash commands (FORCED RESET)")
+            self.logger.info(
+                f"Synced {len(synced)} slash commands"
+            )
         except Exception as e:
             self.logger.error(f"Slash sync failed: {e}")
 
-        self.logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
+        self.logger.info(
+            f"Logged in as {self.user} (ID: {self.user.id})"
+        )
         self.logger.info("Bot ready.")
 
 
