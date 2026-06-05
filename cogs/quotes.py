@@ -13,9 +13,8 @@ from utils.db import (
 
 
 class Quotes(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot):
         self.bot = bot
-        self.initialized = False
 
     # =====================================================
     # INIT DB

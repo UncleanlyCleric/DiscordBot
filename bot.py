@@ -18,7 +18,9 @@ LAVALINK_URI = os.getenv("LAVALINK_URI")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
 
 
-# ---------------- INTENTS ----------------
+# =====================================================
+# INTENTS
+# =====================================================
 intents = discord.Intents.default()
 intents.guilds = True
 intents.message_content = True
@@ -50,7 +52,9 @@ class Bot(commands.Bot):
         if not LAVALINK_URI or not LAVALINK_PASSWORD:
             raise RuntimeError("Missing Lavalink config")
 
-        # ---------------- DB ----------------
+        # =====================================================
+        # DB INIT
+        # =====================================================
         try:
             await init_db()
             self.logger.info("SQLite initialized")
@@ -58,8 +62,12 @@ class Bot(commands.Bot):
             self.logger.error(f"DB init failed: {e}")
             raise
 
-        # ---------------- LAVALINK ----------------
+        # =====================================================
+        # LAVALINK CONNECT
+        # =====================================================
         try:
+            self.logger.info("Connecting to Lavalink...")
+
             await wavelink.Pool.connect(
                 nodes=[
                     wavelink.Node(
@@ -69,12 +77,16 @@ class Bot(commands.Bot):
                 ],
                 client=self
             )
+
             self.logger.info("Lavalink connected")
+
         except Exception as e:
-            self.logger.error(f"Lavalink failed: {e}")
+            self.logger.error(f"Lavalink connection failed: {e}")
             raise
 
-        # ---------------- COGS ----------------
+        # =====================================================
+        # LOAD COGS
+        # =====================================================
         extensions = [
             "cogs.music",
             "cogs.quotes",
@@ -89,45 +101,22 @@ class Bot(commands.Bot):
                 await self.load_extension(ext)
                 self.logger.info(f"Loaded {ext}")
             except Exception as e:
-                # IMPORTANT: don't crash bot if one cog fails
                 self.logger.error(f"Failed to load {ext}: {e}")
 
-        # ---------------- SLASH SYNC ----------------
+        # =====================================================
+        # IMPORTANT: SINGLE SLASH SYNC ONLY
+        # =====================================================
         try:
             synced = await self.tree.sync()
             self.logger.info(f"Global slash sync: {len(synced)} commands")
         except Exception as e:
-            self.logger.error(f"Global sync failed: {e}")
+            self.logger.error(f"Slash sync failed: {e}")
 
-        for guild in self.guilds:
-            try:
-                synced = await self.tree.sync(
-                    guild=discord.Object(id=guild.id)
-                )
-                self.logger.info(
-                    f"Guild sync {guild.name}: {len(synced)} commands"
-                )
-            except Exception as e:
-                self.logger.error(f"Guild sync failed {guild.id}: {e}")
-
-        # ---------------- TASKS ----------------
+        # =====================================================
+        # TASKS
+        # =====================================================
         self.cleanup_task.start()
         self.logger.info("setup_hook complete")
-
-    # =====================================================
-    # READY EVENT
-    # =====================================================
-    async def on_ready(self):
-        self.logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
-
-    # =====================================================
-    # PREFIX COMMANDS SUPPORT
-    # =====================================================
-    async def on_message(self, message: discord.Message):
-        if message.author.bot:
-            return
-
-        await self.process_commands(message)
 
     # =====================================================
     # CLEANUP LOOP
@@ -141,22 +130,18 @@ class Bot(commands.Bot):
             self.logger.error(f"Cleanup error: {e}")
 
     # =====================================================
-    # SAFE SHUTDOWN
+    # MESSAGE HANDLER (PREFIX COMMANDS)
     # =====================================================
-    async def close(self):
-        self.logger.info("Bot shutting down...")
-        await super().close()
+    async def on_message(self, message: discord.Message):
+        if message.author.bot:
+            return
+
+        await self.process_commands(message)
 
 
 # =====================================================
-# ENTRYPOINT (CRITICAL - PREVENTS EXIT LOOP)
+# RUN BOT
 # =====================================================
 if __name__ == "__main__":
-    print("RUNNING BOT...")
-
     bot = Bot()
-
-    try:
-        bot.run(TOKEN)
-    except Exception as e:
-        print(f"BOT CRASHED: {e}")
+    bot.run(TOKEN)
