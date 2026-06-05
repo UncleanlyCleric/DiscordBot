@@ -32,6 +32,9 @@ class Bot(commands.Bot):
     async def setup_hook(self):
         self.logger.info("Starting setup_hook...")
 
+        if not TOKEN:
+            raise RuntimeError("Missing DISCORD_TOKEN")
+
         await init_db()
 
         await wavelink.Pool.connect(
@@ -61,9 +64,10 @@ class Bot(commands.Bot):
                 self.logger.error(f"Failed {ext}: {e}")
 
         await self.tree.sync()
+        self.logger.info("Slash sync complete")
 
     # =====================================================
-    # MESSAGE ROUTER (IMPORTANT FIX)
+    # RAW MESSAGE ROUTER (quotes system)
     # =====================================================
     async def on_message(self, message: discord.Message):
         if message.author.bot:
@@ -75,6 +79,16 @@ class Bot(commands.Bot):
                 await quotes.handle_raw_message(message)
 
         await self.process_commands(message)
+
+
+# =====================================================
+# FIX: SILENTLY IGNORE UNKNOWN COMMANDS
+# =====================================================
+@Bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    raise error
 
 
 if __name__ == "__main__":

@@ -29,17 +29,37 @@ class Quotes(commands.Cog):
             print("[QUOTES] DB init failed:", e)
 
     # =====================================================
+    # SAFE SEND HELPER (FIX #1)
+    # =====================================================
+    async def safe_send(self, channel: discord.abc.Messageable, content: str):
+        try:
+            if hasattr(channel, "permissions_for"):
+                perms = channel.permissions_for(channel.guild.me)
+                if not perms.send_messages:
+                    return
+
+            await channel.send(content)
+
+        except discord.Forbidden:
+            pass
+        except Exception as e:
+            print("[SAFE_SEND ERROR]", e)
+
+    # =====================================================
     # RAW MESSAGE ROUTER (!add<cat>, !<cat>)
     # =====================================================
     async def handle_raw_message(self, message: discord.Message):
         if not message.guild:
             return
 
+        if not message.channel.permissions_for(message.guild.me).send_messages:
+            return
+
         content = message.content.strip()
 
-        # -------------------------------------------------
-        # ➕ ADD QUOTE: !add<category> <text>
-        # -------------------------------------------------
+        # =================================================
+        # ➕ !add<category>
+        # =================================================
         if content.startswith("!add"):
             try:
                 raw = content[4:].strip()
@@ -52,14 +72,15 @@ class Quotes(commands.Cog):
                     author_id=str(message.author.id)
                 )
 
-                await message.channel.send("✅ Quote added.")
-            except:
-                await message.channel.send("Usage: `!add<category> <text>`")
+                await self.safe_send(message.channel, "✅ Quote added.")
+
+            except Exception:
+                await self.safe_send(message.channel, "Usage: `!add<category> <text>`")
             return
 
-        # -------------------------------------------------
-        # 💬 GET QUOTE: !<category>
-        # -------------------------------------------------
+        # =================================================
+        # 💬 !<category>
+        # =================================================
         if content.startswith("!") and len(content) > 1:
             category = content[1:].strip().lower()
 
@@ -70,9 +91,10 @@ class Quotes(commands.Cog):
                 result = await fetch_random(message.guild.id, category)
 
                 if result:
-                    await message.channel.send(f"💬 {result}")
+                    await self.safe_send(message.channel, f"💬 {result}")
+
             except Exception as e:
-                print("[DB] FETCH ERROR:", e)
+                print("[DB FETCH ERROR]", e)
 
     # =====================================================
     # PREFIX COMMANDS
