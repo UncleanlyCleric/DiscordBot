@@ -18,9 +18,9 @@ services:
       - lavalink
 
     working_dir: /app
-
+    
     volumes:
-      - ./data:/app/data   # ✅ THIS IS WHERE IT BELONGS
+      - ./data:/app/data
 
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}

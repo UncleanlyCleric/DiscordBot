@@ -6,9 +6,15 @@ import asyncio
 # DATA ARCHITECTURE (/data folder)
 # -----------------------------------------------------
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# ❌ OLD (Docker-inconsistent path resolution)
+# BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-DATA_DIR = os.path.join(BASE_DIR, "data")
+# ✅ FIX: hard-set Docker-safe path
+DATA_DIR = "/app/data"
+
+# ❌ OLD:
+# DATA_DIR = os.path.join(BASE_DIR, "data")
+
 os.makedirs(DATA_DIR, exist_ok=True)
 
 DB_PATH = os.path.join(DATA_DIR, "quotes.db")

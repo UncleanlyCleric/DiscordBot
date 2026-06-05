@@ -6,7 +6,6 @@ import wavelink
 
 from music.registry import cleanup_managers
 from utils.logger import setup_logger
-
 from utils.db import init as init_db
 
 print("START DIR:", os.getcwd())
@@ -27,7 +26,7 @@ intents.voice_states = True
 
 
 # =====================================================
-# BOT
+# BOT CLASS
 # =====================================================
 class Bot(commands.Bot):
     def __init__(self):
@@ -52,14 +51,19 @@ class Bot(commands.Bot):
         if not LAVALINK_URI or not LAVALINK_PASSWORD:
             raise RuntimeError("Missing Lavalink config")
 
-        # ---------------- SQLITE INIT ----------------
+        # =====================================================
+        # SQLITE INIT (MUST RUN FIRST)
+        # =====================================================
         try:
             await init_db()
             self.logger.info("SQLite initialized")
         except Exception as e:
             self.logger.error(f"DB init failed: {e}")
+            raise
 
-        # ---------------- LAVALINK ----------------
+        # =====================================================
+        # LAVALINK CONNECT
+        # =====================================================
         self.logger.info("Connecting to Lavalink...")
 
         await wavelink.Pool.connect(
@@ -74,7 +78,9 @@ class Bot(commands.Bot):
 
         self.logger.info("Lavalink connected")
 
-        # ---------------- COGS ----------------
+        # =====================================================
+        # COGS
+        # =====================================================
         extensions = [
             "cogs.music",
             "cogs.quotes",
@@ -91,6 +97,9 @@ class Bot(commands.Bot):
             except Exception as e:
                 self.logger.error(f"Failed to load {ext}: {e}")
 
+        # =====================================================
+        # TASKS
+        # =====================================================
         self.cleanup_task.start()
         self.logger.info("setup_hook complete")
 
@@ -110,7 +119,7 @@ class Bot(commands.Bot):
 
         await self.process_commands(message)
 
-    # ---------------- READY ----------------
+    # ---------------- READY EVENT ----------------
     async def on_ready(self):
         try:
             synced = await self.tree.sync()
@@ -122,7 +131,7 @@ class Bot(commands.Bot):
         self.logger.info("Bot ready.")
 
 
-# ---------------- RUN ----------------
+# ---------------- RUN BOT ----------------
 if __name__ == "__main__":
     bot = Bot()
     bot.run(TOKEN)
