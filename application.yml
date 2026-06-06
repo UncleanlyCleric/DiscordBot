@@ -16,10 +16,21 @@ lavalink:
 
 plugins:
   lavasrc:
+    providers:
+      # When Apple Music returns metadata,
+      # search YouTube Music for playable audio.
+      - "ytmsearch:%QUERY%"
+      - "ytsearch:%QUERY%"
+
     sources:
-      youtube: true
-      soundcloud: true
+      applemusic: true
+      spotify: false
+      deezer: false
+      yandexmusic: false
+      flowerytts: false
 
 logging:
   level:
     root: INFO
+    lavalink: INFO
+    dev.lavalink.youtube: INFO
