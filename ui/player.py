@@ -11,7 +11,7 @@ class PlayerView(discord.ui.View):
         cog = self.bot.get_cog("Music")
         return cog.get_player(self.guild_id)
 
-    # ---------------- BACK (FIXED HISTORY) ----------------
+    # ---------------- BACK ----------------
     @discord.ui.button(emoji="⏮️", style=discord.ButtonStyle.secondary, row=0)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
         gm = self.gm()
@@ -26,7 +26,7 @@ class PlayerView(discord.ui.View):
 
         await interaction.response.defer()
 
-    # ---------------- PLAY / PAUSE ----------------
+    # ---------------- PLAY/PAUSE ----------------
     @discord.ui.button(emoji="⏯️", style=discord.ButtonStyle.primary, row=0)
     async def play_pause(self, interaction: discord.Interaction, button: discord.ui.Button):
         gm = self.gm()
@@ -35,10 +35,7 @@ class PlayerView(discord.ui.View):
             return await interaction.response.defer()
 
         try:
-            if gm.player.paused:
-                await gm.player.pause(False)
-            else:
-                await gm.player.pause(True)
+            await gm.player.pause(not gm.player.paused)
         except Exception:
             pass
 
