@@ -35,9 +35,6 @@ class Bot(commands.Bot):
         )
         self.logger = setup_logger()
 
-    # =====================================================
-    # STARTUP
-    # =====================================================
     async def setup_hook(self):
         self.logger.info("Starting setup_hook...")
 
@@ -79,42 +76,28 @@ class Bot(commands.Bot):
         self.logger.info("Slash sync complete")
 
     # =====================================================
-    # MESSAGE ROUTER (FIXED — NO COMMAND CONFLICTS)
+    # MESSAGE ROUTER
     # =====================================================
     async def on_message(self, message: discord.Message):
-        if message.author.bot:
+        if message.author.bot or not message.guild:
             return
 
-        if not message.guild:
-            return
-
-        content = message.content.strip()
-
-        # -------------------------------------------------
-        # 1. ALWAYS RUN QUOTES RAW ROUTER FIRST
-        # -------------------------------------------------
+        # RAW quote system (handles !add<cat> and !<cat>)
         quotes = self.get_cog("Quotes")
         if quotes:
             await quotes.handle_raw_message(message)
 
-        # -------------------------------------------------
-        # 2. BLOCK CUSTOM !<category> FROM ENTERING COMMAND SYSTEM
-        # -------------------------------------------------
+        # Prevent command spam for bare !something
+        content = message.content.strip()
         if content.startswith("!") and len(content) > 1:
             after = content[1:]
-
-            # if it's !<category> (no space), STOP HERE
-            # prevents discord.py CommandNotFound spam
             if " " not in after:
                 return
 
-        # -------------------------------------------------
-        # 3. NORMAL PREFIX COMMANDS ONLY
-        # -------------------------------------------------
         await self.process_commands(message)
 
     # =====================================================
-    # SILENTLY IGNORE UNKNOWN COMMANDS
+    # ERROR HANDLING
     # =====================================================
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CommandNotFound):

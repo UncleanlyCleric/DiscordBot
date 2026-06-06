@@ -2,68 +2,48 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
-from utils.db import add, fetch_random, search, delete, edit, init
+from utils.db import add, fetch_random, search, delete, edit
 
 
 # =====================================================
-# 🎯 QUOTES COG
+# QUOTES COG
 # =====================================================
 class Quotes(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self._initialized = False
 
     # =====================================================
-    # DB INIT
-    # =====================================================
-    @commands.Cog.listener()
-    async def on_ready(self):
-        if self._initialized:
-            return
-        self._initialized = True
-
-        try:
-            await init()
-            print("[QUOTES] DB initialized")
-        except Exception as e:
-            print("[QUOTES] DB init failed:", e)
-
-    # =====================================================
-    # SAFE SEND HELPER (FIX #1)
+    # SAFE SEND
     # =====================================================
     async def safe_send(self, channel: discord.abc.Messageable, content: str):
         try:
-            if hasattr(channel, "permissions_for"):
-                perms = channel.permissions_for(channel.guild.me)
-                if not perms.send_messages:
-                    return
-
             await channel.send(content)
-
         except discord.Forbidden:
             pass
         except Exception as e:
-            print("[SAFE_SEND ERROR]", e)
+            self.bot.logger.error(f"SAFE_SEND ERROR: {e}")
 
     # =====================================================
-    # RAW MESSAGE ROUTER (!add<cat>, !<cat>)
+    # RAW MESSAGE ROUTER
     # =====================================================
     async def handle_raw_message(self, message: discord.Message):
         if not message.guild:
             return
 
-        if not message.channel.permissions_for(message.guild.me).send_messages:
-            return
-
         content = message.content.strip()
 
         # =================================================
-        # ➕ !add<category>
+        # ➕ !add<category> <text>
         # =================================================
         if content.startswith("!add"):
             try:
                 raw = content[4:].strip()
-                category, text = raw.split(" ", 1)
+                parts = raw.split(maxsplit=1)
+
+                if len(parts) < 2:
+                    raise ValueError("missing args")
+
+                category, text = parts
 
                 await add(
                     guild_id=message.guild.id,
@@ -94,7 +74,7 @@ class Quotes(commands.Cog):
                     await self.safe_send(message.channel, f"💬 {result}")
 
             except Exception as e:
-                print("[DB FETCH ERROR]", e)
+                self.bot.logger.error(f"DB FETCH ERROR: {e}")
 
     # =====================================================
     # PREFIX COMMANDS
@@ -120,7 +100,7 @@ class Quotes(commands.Cog):
         await ctx.send("✏️ Updated" if ok else "Not found")
 
     # =====================================================
-    # SLASH COMMAND GROUP (/quote)
+    # SLASH COMMAND GROUP
     # =====================================================
     quote = app_commands.Group(
         name="quote",
@@ -165,7 +145,9 @@ class Quotes(commands.Cog):
 
 
 # =====================================================
-# BOT SETUP
+# SETUP
 # =====================================================
 async def setup(bot: commands.Bot):
-    await bot.add_cog(Quotes(bot))
+    cog = Quotes(bot)
+    await bot.add_cog(cog)
+    bot.tree.add_command(cog.quote)
