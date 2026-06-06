@@ -17,10 +17,34 @@ class Music(commands.Cog):
         self.players: dict[int, MusicManager] = {}
         self.converter = PlaylistConverter()
 
+    # ---------------- PLAYER ACCESS ----------------
     def get_player(self, guild_id: int) -> MusicManager:
         if guild_id not in self.players:
             self.players[guild_id] = MusicManager(guild_id)
         return self.players[guild_id]
+
+    # ---------------- EMBED (UPGRADED UI) ----------------
+    def now_playing(self, track, position=0):
+        title = getattr(track, "title", "Unknown Title")
+        author = getattr(track, "author", "Unknown Artist")
+        duration = getattr(track, "length", 0)
+
+        # safe formatting
+        progress = f"{int(position/1000)}s / {int(duration/1000)}s"
+
+        embed = discord.Embed(
+            title="🎧 Now Playing",
+            description=f"🎵 **{title}**\n🎤 **{author}**",
+            color=discord.Color.green()
+        )
+
+        embed.add_field(name="⏱ Progress", value=progress, inline=True)
+
+        uri = getattr(track, "uri", None)
+        if uri:
+            embed.add_field(name="🔗 Source", value=f"[Open Track]({uri})", inline=False)
+
+        return embed
 
     # ---------------- PLAY ----------------
     @commands.hybrid_command(name="play")
@@ -40,7 +64,7 @@ class Music(commands.Cog):
 
         gm.player = voice
 
-        # 🔥 FIX: ALWAYS run through converter first
+        # convert input (fixes Apple/playlist junk input)
         queries = await self.converter.convert(query)
 
         if not queries:
@@ -50,7 +74,6 @@ class Music(commands.Cog):
 
         for q in queries:
 
-            # 🚨 HARD GUARD: never allow URLs
             if not isinstance(q, str) or "http" in q:
                 continue
 
@@ -64,15 +87,16 @@ class Music(commands.Cog):
                 count += 1
 
             except Exception as e:
-                log.warning(f"play search failed: {q} -> {e}")
+                log.warning(f"[PLAY ERROR] {q} -> {e}")
 
         await ctx.send(f"🎧 Added {count} track(s)")
 
         view = PlayerView(self.bot, ctx.guild.id)
+
         msg = await ctx.send(
-            embed=discord.Embed(
+            embed=self.now_playing(gm.now_playing, 0) if gm.now_playing else discord.Embed(
                 title="🎧 Player Ready",
-                description="Controls active",
+                description="Queue started",
                 color=discord.Color.green()
             ),
             view=view
@@ -80,6 +104,8 @@ class Music(commands.Cog):
 
         gm.message = msg
         gm.view = view
+
+        asyncio.create_task(self.start_progress_updater(ctx.guild.id))
 
     # ---------------- PLAYLIST ----------------
     @commands.hybrid_command(name="playlist")
@@ -123,7 +149,7 @@ class Music(commands.Cog):
                 count += 1
 
             except Exception as e:
-                log.warning(f"playlist failed: {q} -> {e}")
+                log.warning(f"[PLAYLIST ERROR] {q} -> {e}")
 
         await ctx.send(f"✅ Added {count} tracks")
 
@@ -137,11 +163,7 @@ class Music(commands.Cog):
 
                 if gm.message:
                     await gm.message.edit(
-                        embed=discord.Embed(
-                            title="🎧 Now Playing",
-                            description=getattr(gm.now_playing, "title", "Unknown"),
-                            color=discord.Color.green()
-                        ),
+                        embed=self.now_playing(gm.now_playing, pos),
                         view=gm.view
                     )
 
