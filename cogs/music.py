@@ -24,7 +24,7 @@ class Music(commands.Cog):
         self.bot = bot
 
     # =====================================================
-    # TRACK END
+    # TRACK END EVENT
     # =====================================================
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, payload):
@@ -45,14 +45,12 @@ class Music(commands.Cog):
         )
 
     # =====================================================
-    # PLAY COMMAND (FIXED VOICE TIMEOUT)
+    # PLAY COMMAND (FIXED VOICE HANDLING)
     # =====================================================
     @commands.hybrid_command(name="play")
     async def play(self, ctx: commands.Context, *, query: str):
 
-        # =========================
-        # SLASH SAFETY
-        # =========================
+        # defer only for slash commands
         if ctx.interaction:
             await ctx.interaction.response.defer()
 
@@ -62,47 +60,32 @@ class Music(commands.Cog):
         gm = get_player(ctx.guild.id)
 
         # =====================================================
-        # 🔥 FIX: HARD RESET STUCK VOICE SESSION
-        # =====================================================
-        voice = ctx.voice_client
-
-        if voice:
-            try:
-                log.info("[VOICE] forcing cleanup of old session")
-                await voice.disconnect(force=True)
-                await asyncio.sleep(1)  # allow Discord to fully clear state
-            except Exception as e:
-                log.warning(f"[VOICE] cleanup warning: {e}")
-
-        # =====================================================
-        # 🔥 FIX: SAFE FRESH CONNECT (prevents 30s timeout)
+        # SAFE VOICE CONNECT (NO FORCE DISCONNECT LOOP)
         # =====================================================
         try:
-            log.info("[VOICE] connecting fresh")
+            voice = ctx.voice_client
 
-            voice = await asyncio.wait_for(
-                ctx.author.voice.channel.connect(cls=wavelink.Player),
-                timeout=10
-            )
+            if voice is None:
+                log.info("[VOICE] connecting...")
+                voice = await ctx.author.voice.channel.connect(cls=wavelink.Player)
+                log.info("[VOICE] connected")
+            else:
+                log.info("[VOICE] reusing existing connection")
 
-            log.info("[VOICE] connected successfully")
-
-        except asyncio.TimeoutError:
-            log.error("[VOICE] TIMEOUT")
-            return await ctx.send("❌ Voice connection timed out.")
+        except discord.ClientException:
+            # already connected somewhere else
+            voice = ctx.voice_client
         except Exception as e:
-            log.error(f"[VOICE] ERROR: {e}")
+            log.error(f"[VOICE] connect error: {e}")
             return await ctx.send(f"❌ Voice error: {e}")
 
         gm.player = voice
 
         # =====================================================
-        # RESOLVE QUERY
+        # SEARCH TRACK
         # =====================================================
         try:
-            log.info(f"[SEARCH] query: {query}")
-
-            query = await resolve_music(query)
+            log.info(f"[SEARCH] {query}")
 
             results = await asyncio.wait_for(
                 wavelink.Playable.search(query),
@@ -112,7 +95,7 @@ class Music(commands.Cog):
         except asyncio.TimeoutError:
             return await ctx.send("❌ Search timed out.")
         except Exception as e:
-            log.error(f"[SEARCH] ERROR: {e}")
+            log.error(f"[SEARCH] error: {e}")
             return await ctx.send("❌ Search failed.")
 
         if not results:
@@ -120,7 +103,7 @@ class Music(commands.Cog):
 
         track = results[0]
 
-        log.info(f"[QUEUE] adding: {track.title}")
+        log.info(f"[QUEUE] {track.title}")
 
         await gm.add(track)
 
@@ -130,7 +113,7 @@ class Music(commands.Cog):
         await ctx.send(embed=self.now_playing(track))
 
     # =====================================================
-    # VOICE TEST
+    # VOICE TEST (NOW SAFE)
     # =====================================================
     @commands.command()
     async def voicetest(self, ctx):
@@ -138,24 +121,16 @@ class Music(commands.Cog):
         if not ctx.author.voice:
             return await ctx.send("Join a voice channel first.")
 
-        log.info("VOICE TEST START")
-        log.info("BEFORE CONNECT")
-
         try:
             vc = await ctx.author.voice.channel.connect()
-
-            log.info("AFTER CONNECT")
-
             await ctx.send("Connected successfully")
-
             await asyncio.sleep(2)
-
             await vc.disconnect()
 
-            log.info("VOICE TEST END")
-
+        except discord.ClientException:
+            await ctx.send("Already connected somewhere.")
         except Exception as e:
-            log.error(f"VOICE TEST ERROR: {e}")
+            log.error(f"voicetest error: {e}")
             await ctx.send(f"Voice test failed: {e}")
 
     # =====================================================

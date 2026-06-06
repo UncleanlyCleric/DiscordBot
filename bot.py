@@ -14,18 +14,12 @@ LAVALINK_URI = os.getenv("LAVALINK_URI")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
 
 
-# =====================================================
-# INTENTS
-# =====================================================
 intents = discord.Intents.default()
 intents.guilds = True
 intents.message_content = True
 intents.voice_states = True
 
 
-# =====================================================
-# BOT CLASS
-# =====================================================
 class Bot(commands.Bot):
     def __init__(self):
         super().__init__(
@@ -76,28 +70,20 @@ class Bot(commands.Bot):
         self.logger.info("Slash sync complete")
 
     # =====================================================
-    # MESSAGE ROUTER
+    # FIXED MESSAGE ROUTER
     # =====================================================
     async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:
             return
 
-        # RAW quote system (handles !add<cat> and !<cat>)
+        # allow commands to work FIRST (critical fix)
+        await self.process_commands(message)
+
+        # optional raw quote system AFTER commands
         quotes = self.get_cog("Quotes")
         if quotes:
             await quotes.handle_raw_message(message)
 
-        # Prevent command spam for bare !something
-        content = message.content.strip()
-        if content.startswith("!") and len(content) > 1:
-            after = content[1:]
-            if " " not in after:
-                return
-
-        await self.process_commands(message)
-
-    # =====================================================
-    # ERROR HANDLING
     # =====================================================
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CommandNotFound):
@@ -107,9 +93,6 @@ class Bot(commands.Bot):
         raise error
 
 
-# =====================================================
-# RUN BOT
-# =====================================================
 if __name__ == "__main__":
     bot = Bot()
     bot.run(TOKEN)
