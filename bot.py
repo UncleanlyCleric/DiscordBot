@@ -141,12 +141,17 @@ class Bot(commands.Bot):
         print(f"[COMMAND] {ctx.command} by {ctx.author}")
 
     async def on_command_error(self, ctx, error):
-        print(f"[COMMAND ERROR] {error}")
-        traceback.print_exception(type(error), error, error.__traceback__)
 
         if isinstance(error, commands.CommandNotFound):
             return
+        print(f"[COMMAND ERROR] {error}")
 
+        traceback.print_exception(
+            type(error),
+            error,
+            error.__traceback__
+        )
+        
         raise error
 
 
