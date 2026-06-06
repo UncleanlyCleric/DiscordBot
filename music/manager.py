@@ -60,11 +60,11 @@ class MusicManager:
 
             track = None
 
-            # queue
+            # normal queue
             if not self.queue.empty():
                 track = await self.queue.get()
 
-            # Spotify-style autoplay
+            # autoplay fallback
             elif self.radio_enabled and self.radio_seed:
                 results = await wavelink.Playable.search(self.radio_seed)
 

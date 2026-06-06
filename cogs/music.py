@@ -11,33 +11,31 @@ from ui.player import PlayerView
 log = logging.getLogger("music")
 log.setLevel(logging.INFO)
 
-players: dict[int, MusicManager] = {}
-
-
-def get_player(guild_id: int) -> MusicManager:
-    if guild_id not in players:
-        players[guild_id] = MusicManager(guild_id)
-    return players[guild_id]
-
 
 class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.players: dict[int, MusicManager] = {}
+
+    # ---------------- SAFE PLAYER ACCESS (FIX) ----------------
+    def get_player(self, guild_id: int) -> MusicManager:
+        if guild_id not in self.players:
+            self.players[guild_id] = MusicManager(guild_id)
+        return self.players[guild_id]
 
     # ---------------- TRACK END ----------------
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, payload):
         try:
-            gm = get_player(payload.player.guild.id)
+            gm = self.get_player(payload.player.guild.id)
             gm.player = payload.player
             await gm.play_next()
         except Exception as e:
             log.error(f"track_end error: {e}")
 
-    # ---------------- PRO NOW PLAYING ----------------
+    # ---------------- NOW PLAYING EMBED ----------------
     def now_playing(self, track, position=0):
         duration = getattr(track, "length", 0)
-
         bar = create_bar(position, duration)
 
         embed = discord.Embed(
@@ -57,7 +55,7 @@ class Music(commands.Cog):
 
     # ---------------- LIVE UPDATER ----------------
     async def start_progress_updater(self, guild_id: int):
-        gm = get_player(guild_id)
+        gm = self.get_player(guild_id)
 
         while gm and gm.player and gm.now_playing:
             try:
@@ -73,7 +71,7 @@ class Music(commands.Cog):
             except Exception:
                 break
 
-    # ---------------- PLAY ----------------
+    # ---------------- PLAY COMMAND ----------------
     @commands.hybrid_command(name="play")
     async def play(self, ctx: commands.Context, *, query: str):
 
@@ -83,7 +81,7 @@ class Music(commands.Cog):
         if not ctx.author.voice:
             return await ctx.send("Join a voice channel first.")
 
-        gm = get_player(ctx.guild.id)
+        gm = self.get_player(ctx.guild.id)
 
         try:
             voice = ctx.voice_client
@@ -124,7 +122,6 @@ class Music(commands.Cog):
         if not gm.now_playing:
             await gm.play_next()
 
-        # UI
         view = PlayerView(self.bot, ctx.guild.id)
 
         msg = await ctx.send(
@@ -140,7 +137,7 @@ class Music(commands.Cog):
     # ---------------- VOTE SKIP ----------------
     @commands.hybrid_command(name="voteskip")
     async def voteskip(self, ctx):
-        gm = get_player(ctx.guild.id)
+        gm = self.get_player(ctx.guild.id)
 
         if not gm.player:
             return await ctx.send("Nothing playing.")
@@ -163,7 +160,7 @@ class Music(commands.Cog):
     # ---------------- AUTOPLAY ----------------
     @commands.hybrid_command(name="autoplay")
     async def autoplay(self, ctx, query: str):
-        gm = get_player(ctx.guild.id)
+        gm = self.get_player(ctx.guild.id)
 
         gm.radio_enabled = True
         gm.radio_seed = query
@@ -173,7 +170,7 @@ class Music(commands.Cog):
     # ---------------- QUEUE ----------------
     @commands.hybrid_command(name="queue")
     async def queue(self, ctx):
-        gm = get_player(ctx.guild.id)
+        gm = self.get_player(ctx.guild.id)
 
         if gm.queue.empty() and not gm.now_playing:
             return await ctx.send("Queue is empty.")
@@ -199,7 +196,7 @@ class Music(commands.Cog):
     # ---------------- SKIP ----------------
     @commands.hybrid_command(name="skip")
     async def skip(self, ctx):
-        gm = get_player(ctx.guild.id)
+        gm = self.get_player(ctx.guild.id)
 
         if gm.player:
             await gm.player.stop()
@@ -209,7 +206,7 @@ class Music(commands.Cog):
     # ---------------- STOP ----------------
     @commands.hybrid_command(name="stop")
     async def stop(self, ctx):
-        gm = get_player(ctx.guild.id)
+        gm = self.get_player(ctx.guild.id)
 
         await gm.stop()
         await ctx.send("⏹ Stopped")

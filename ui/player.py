@@ -8,7 +8,8 @@ class PlayerView(discord.ui.View):
         self.guild_id = guild_id
 
     def gm(self):
-        return self.bot.get_cog("Music").get_player(self.guild_id)
+        cog = self.bot.get_cog("Music")
+        return cog.get_player(self.guild_id)
 
     @discord.ui.button(label="⏯", style=discord.ButtonStyle.primary)
     async def play_pause(self, interaction: discord.Interaction, button: discord.ui.Button):
