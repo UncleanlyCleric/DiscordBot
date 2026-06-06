@@ -85,7 +85,7 @@ class Music(commands.Cog):
         for q in queries:
             try:
                 # music-optimized search
-                results = await wavelink.Playable.search(f"ytmsearch:{q}")
+                results = await wavelink.Playable.search(q)
 
                 if not results:
                     continue
@@ -143,7 +143,7 @@ class Music(commands.Cog):
 
         gm.player = voice
 
-        results = await wavelink.Playable.search(f"ytmsearch:{query}")
+        results = await wavelink.Playable.search(query)
 
         if not results:
             return await ctx.send("No results found.")
