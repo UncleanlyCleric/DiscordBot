@@ -25,32 +25,53 @@ class PlayerView(discord.ui.View):
 
         await interaction.response.defer()
 
-    # ---------------- PLAY / PAUSE ----------------
+    # ---------------- PLAY/PAUSE ----------------
     @discord.ui.button(emoji="⏯", style=discord.ButtonStyle.primary)
-    async def play_pause(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def play_pause(self, interaction, button):
         gm = self.gm()
 
         if not gm.player:
             return await interaction.response.defer()
 
-        paused = gm.player.paused
-        await gm.player.pause(not paused)
-
+        await gm.player.pause(not gm.player.paused)
         await interaction.response.defer()
 
     # ---------------- SKIP ----------------
     @discord.ui.button(emoji="⏭", style=discord.ButtonStyle.secondary)
-    async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def skip(self, interaction, button):
         gm = self.gm()
 
-        if gm.player:
-            await gm.player.stop()
+        gm.skip_lock = True
+        await gm.player.stop()
+        gm.skip_lock = False
 
         await interaction.response.defer()
 
+    # ---------------- VOLUME DOWN ----------------
+    @discord.ui.button(emoji="🔉", style=discord.ButtonStyle.secondary)
+    async def vol_down(self, interaction, button):
+        gm = self.gm()
+        await gm.set_volume(gm.volume - 10)
+
+        await interaction.response.send_message(
+            f"Volume: {gm.volume}",
+            ephemeral=True
+        )
+
+    # ---------------- VOLUME UP ----------------
+    @discord.ui.button(emoji="🔊", style=discord.ButtonStyle.secondary)
+    async def vol_up(self, interaction, button):
+        gm = self.gm()
+        await gm.set_volume(gm.volume + 10)
+
+        await interaction.response.send_message(
+            f"Volume: {gm.volume}",
+            ephemeral=True
+        )
+
     # ---------------- SHUFFLE ----------------
     @discord.ui.button(emoji="🔀", style=discord.ButtonStyle.secondary)
-    async def shuffle(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def shuffle(self, interaction, button):
         gm = self.gm()
 
         count = await gm.shuffle()
@@ -62,9 +83,8 @@ class PlayerView(discord.ui.View):
 
     # ---------------- STOP ----------------
     @discord.ui.button(emoji="⏹", style=discord.ButtonStyle.danger)
-    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def stop(self, interaction, button):
         gm = self.gm()
 
         await gm.stop()
-
         await interaction.response.defer()

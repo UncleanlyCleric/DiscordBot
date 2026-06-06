@@ -12,9 +12,9 @@ class MusicManager:
         self.guild_id = guild_id
 
         self.queue = asyncio.Queue()
+        self.history = []
 
         self.now_playing = None
-        self.history = []
 
         self.player: wavelink.Player | None = None
         self.lock = asyncio.Lock()
@@ -27,7 +27,11 @@ class MusicManager:
         self.radio_enabled = False
         self.radio_seed = None
 
-        self.volume = 50
+        # ✅ FIX: navigation control
+        self.skip_lock = False
+
+        # ✅ FIX: volume state
+        self.volume = 100
 
     # ---------------- STATE ----------------
     def touch(self):
@@ -36,88 +40,87 @@ class MusicManager:
     def is_idle(self):
         return self.now_playing is None and self.queue.empty()
 
-    # ---------------- CONNECT ----------------
-    async def connect(self, channel):
+    # ---------------- VOLUME ----------------
+    async def set_volume(self, value: int):
+        self.volume = max(0, min(200, value))
+
         if self.player:
-            return self.player
-
-        self.player = await channel.connect(cls=wavelink.Player)
-
-        try:
-            await self.player.set_volume(self.volume)
-        except Exception:
-            pass
-
-        return self.player
+            try:
+                await self.player.set_volume(self.volume)
+            except Exception as e:
+                log.warning(f"Volume set failed: {e}")
 
     # ---------------- ADD ----------------
-    async def add(self, track, source="queue"):
+    async def add(self, track):
         self.touch()
 
         if not self.radio_seed:
             self.radio_seed = getattr(track, "author", None)
 
-        await self.queue.put((track, source))
+        await self.queue.put(track)
 
         if not self.now_playing:
             await self.play_next()
 
     # ---------------- PLAY NEXT ----------------
-    async def play_next(self):
+    async def play_next(self, from_back=False):
         async with self.lock:
 
             if not self.player:
                 return
 
-            if self.queue.empty():
+            # only push history if normal forward flow
+            if self.now_playing and not from_back:
+                self.history.append(self.now_playing)
+
+            track = None
+
+            if not self.queue.empty():
+                track = await self.queue.get()
+
+            if not track:
                 self.now_playing = None
                 return
-
-            track, source = await self.queue.get()
-
-            # 🔥 ALWAYS record history BEFORE overwrite
-            if self.now_playing is not None:
-                self.history.append(self.now_playing)
 
             self.now_playing = track
             self.touch()
 
             try:
+                self.skip_lock = True
                 await self.player.play(track)
-            except Exception as e:
-                log.error(f"Play error: {e}")
-                self.now_playing = None
+                await self.player.set_volume(self.volume)
+            finally:
+                self.skip_lock = False
 
-    # ---------------- PREVIOUS TRACK ----------------
+    # ---------------- BACK ----------------
     async def play_previous(self):
-        if not self.player:
-            return None
+        async with self.lock:
 
-        if not self.history:
-            return None
+            if not self.history:
+                return None
 
-        previous = self.history.pop()
+            prev = self.history.pop()
 
-        if self.now_playing:
-            await self.queue.put((self.now_playing, "history"))
+            # push current back into queue (front behavior approximated)
+            if self.now_playing:
+                await self.queue.put(self.now_playing)
 
-        self.now_playing = previous
+            self.now_playing = prev
 
-        try:
-            await self.player.play(previous)
-        except Exception as e:
-            log.error(f"Back play failed: {e}")
-            return None
+            try:
+                self.skip_lock = True
+                await self.player.play(prev)
+                await self.player.set_volume(self.volume)
+            finally:
+                self.skip_lock = False
 
-        return previous
+            return prev
 
     # ---------------- STOP ----------------
     async def stop(self):
-        self.touch()
-
-        self.now_playing = None
-        self.queue = asyncio.Queue()
         self.history.clear()
+        self.queue = asyncio.Queue()
+        self.now_playing = None
 
         try:
             if self.player:
@@ -147,18 +150,3 @@ class MusicManager:
             await self.queue.put(i)
 
         return len(items)
-
-    # ---------------- VOLUME (FIXED) ----------------
-    async def set_volume(self, value: int):
-        self.volume = max(0, min(100, value))
-
-        if not self.player:
-            return
-
-        try:
-            await self.player.set_volume(self.volume)
-        except Exception:
-            try:
-                self.player.volume = self.volume
-            except Exception:
-                pass
