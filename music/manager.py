@@ -1,6 +1,9 @@
 import asyncio
 import time
+import logging
 import wavelink
+
+log = logging.getLogger("music")
 
 
 class MusicManager:
@@ -18,6 +21,10 @@ class MusicManager:
 
         self.last_active = time.time()
 
+        # autoplay / radio support
+        self.radio_enabled = False
+        self.radio_seed = None
+
     # ---------------- STATE ----------------
     def touch(self):
         self.last_active = time.time()
@@ -25,23 +32,38 @@ class MusicManager:
     def is_idle(self):
         return self.now_playing is None and self.queue.empty()
 
-    # ---------------- CONNECT SAFETY ----------------
+    # ---------------- CONNECT ----------------
     async def connect(self, channel):
         if self.player:
             return self.player
 
         self.player = await channel.connect(cls=wavelink.Player)
+
+        log.info(
+            f"[Guild {self.guild_id}] Connected to voice channel"
+        )
+
         return self.player
 
     # ---------------- ADD TRACK ----------------
     async def add(self, track):
         self.touch()
+
+        # seed autoplay from first track added
+        if not self.radio_seed:
+            self.radio_seed = getattr(track, "author", None)
+
         await self.queue.put(track)
+
+        log.info(
+            f"[Guild {self.guild_id}] Queued: "
+            f"{getattr(track, 'title', 'Unknown')}"
+        )
 
         if not self.now_playing:
             await self.play_next()
 
-    # ---------------- CORE PLAYBACK ----------------
+    # ---------------- PLAY NEXT ----------------
     async def play_next(self):
         async with self.lock:
 
@@ -55,6 +77,11 @@ class MusicManager:
 
             if not track:
                 self.now_playing = None
+
+                log.info(
+                    f"[Guild {self.guild_id}] Queue empty"
+                )
+
                 return
 
             self.now_playing = track
@@ -62,32 +89,44 @@ class MusicManager:
 
             try:
                 await self.player.play(track)
-            except Exception:
-                self.now_playing = None
-                await self.play_next()
 
-    # =========================================================
-    # 🔥 FIXED STOP (THIS IS WHAT YOUR UI WAS FAILING ON)
-    # =========================================================
+                log.info(
+                    f"[Guild {self.guild_id}] Playing: "
+                    f"{getattr(track, 'title', 'Unknown')}"
+                )
+
+            except Exception as e:
+                log.exception(
+                    f"[Guild {self.guild_id}] Failed to play track: {e}"
+                )
+
+                self.now_playing = None
+
+    # ---------------- STOP ----------------
     async def stop(self):
         """
-        Fully stops playback, clears queue, and disconnects safely.
-        This MUST exist for UI button.
+        Fully stop playback,
+        clear queue,
+        disconnect voice,
+        clean UI.
         """
+
+        self.touch()
 
         self.now_playing = None
 
-        # clear queue safely
+        # clear queue
         self.queue = asyncio.Queue()
 
-        # stop audio
+        # reset autoplay state
+        self.radio_seed = None
+
         try:
             if self.player:
                 await self.player.stop()
         except Exception:
             pass
 
-        # disconnect voice
         try:
             if self.player:
                 await self.player.disconnect()
@@ -96,9 +135,12 @@ class MusicManager:
 
         self.player = None
 
-        # optional UI cleanup
         if self.message:
             try:
                 await self.message.edit(view=None)
             except Exception:
                 pass
+
+        log.info(
+            f"[Guild {self.guild_id}] Playback stopped"
+        )
