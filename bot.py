@@ -1,3 +1,4 @@
+import cmd
 import os
 import discord
 from discord.ext import commands
@@ -93,6 +94,10 @@ class Bot(commands.Bot):
 
         # ---------------- SLASH SYNC ----------------
         print("[BOOT] syncing slash commands...")
+        print("[BOOT] Registered app commands:")
+
+        for cmd in self.tree.get_commands():
+             print(f" - {cmd.name}")
 
         try:
             synced = await self.tree.sync()
