@@ -83,18 +83,22 @@ class Music(commands.Cog):
         count = 0
 
         for q in queries:
-
             try:
-                results = await wavelink.Playable.search(f"ytsearch:{q}")
+                results = await wavelink.Playable.search(f"ytmsearch:{q}")
 
                 if results:
-                    await gm.add(results[0])
+                    track = results[0]
+                    await gm.add(track)
                     count += 1
 
-            except Exception:
+                    # prevents rate spikes + improves stability
+                    await asyncio.sleep(0.2)
+
+            except Exception as e:
+                log.error(f"playlist search error: {e}")
                 continue
 
-        await ctx.send(f"✅ Added {count} tracks")
+        await ctx.send(f"✅ Added {count} tracks to queue")
 
     # ---------------- PLAY ----------------
     @commands.hybrid_command(name="play")
@@ -115,7 +119,7 @@ class Music(commands.Cog):
 
         gm.player = voice
 
-        results = await wavelink.Playable.search(f"ytsearch:{query}")
+        results = await wavelink.Playable.search(f"ytmsearch:{query}")
 
         if not results:
             return await ctx.send("No results found.")
@@ -152,7 +156,8 @@ class Music(commands.Cog):
 
                 await asyncio.sleep(5)
 
-            except Exception:
+            except Exception as e:
+                log.error(f"UI update error: {e}")
                 break
 
 

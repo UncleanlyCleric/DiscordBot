@@ -1,13 +1,11 @@
 import re
-from urllib.parse import urlparse, unquote
-import requests
-from bs4 import BeautifulSoup
+from urllib.parse import urlparse
 
 
 class PlaylistConverter:
     """
-    Converts playlist URLs (Apple Music / YouTube / generic) into search queries.
-    No external APIs required.
+    Converts playlist URLs (Apple Music / YouTube / generic)
+    into search queries for Lavalink (YouTube fallback).
     """
 
     def detect_source(self, url: str):
@@ -30,61 +28,45 @@ class PlaylistConverter:
 
     # ---------------- YOUTUBE ----------------
     async def _youtube(self, url: str):
-        # Lavalink handles playlist URLs directly
+        # Lavalink can handle playlists directly
         return [url]
 
     # ---------------- APPLE MUSIC (FIXED) ----------------
     async def _apple(self, url: str):
         """
-        Improved Apple Music resolver:
-        - tries to extract playlist title from HTML
-        - falls back to URL parsing if blocked
+        Apple Music cannot be reliably scraped.
+        We convert the URL into multiple strong YouTube search seeds.
         """
 
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0"
-            }
+        path = urlparse(url).path
+        parts = [p for p in path.split("/") if p]
 
-            html = requests.get(url, headers=headers, timeout=10).text
-            soup = BeautifulSoup(html, "html.parser")
+        seed_parts = []
 
-            # Try extracting real title
-            title = soup.title.string if soup.title else ""
+        for p in parts:
+            # skip Apple playlist IDs like pl.u-xxxx
+            if p.startswith("pl.") or "pl." in p:
+                continue
 
-            if title:
-                title = re.sub(r"-.*Apple Music.*", "", title).strip()
-                title = re.sub(r"\s+", " ", title)
-
-                if title:
-                    return [title]
-
-        except Exception as e:
-            print("[APPLE PARSE FAIL]", e)
-
-        # ---------------- FALLBACK (URL BASED) ----------------
-        parsed = urlparse(url)
-        path = unquote(parsed.path)
-
-        path = re.sub(r"playlist|album|music|apple|com", "", path, flags=re.I)
-
-        tokens = [t for t in path.split("/") if t]
-
-        queries = []
-
-        for t in tokens:
-            cleaned = re.sub(r"[-_]+", " ", t).strip()
-            cleaned = re.sub(r"\s+", " ", cleaned)
+            cleaned = re.sub(r"[-_]+", " ", p)
+            cleaned = re.sub(r"[0-9]+", "", cleaned).strip()
 
             if len(cleaned) > 2:
-                queries.append(cleaned)
+                seed_parts.append(cleaned)
 
-        # final safety fallback
-        if not queries:
-            fallback = url.split("/")[-1].replace("-", " ").strip()
-            queries = [fallback]
+        # fallback if Apple gives nothing useful
+        if not seed_parts:
+            seed_parts = [parts[-2]] if len(parts) >= 2 else [url]
 
-        return queries
+        base = " ".join(seed_parts).strip()
+
+        # IMPORTANT: expand into multiple queries (this is what makes it work)
+        return [
+            base,
+            f"{base} playlist",
+            f"{base} mix",
+            f"{base} songs"
+        ]
 
     # ---------------- FALLBACK ----------------
     def _fallback(self, url: str):
