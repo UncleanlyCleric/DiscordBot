@@ -86,7 +86,9 @@ class Music(commands.Cog):
                 continue
 
             try:
+                print("ABOUT TO SEARCH:", q)
                 results = await wavelink.Playable.search(q)
+                print("SEARCH FINISHED")
 
                 print("================================")
                 print("SEARCH:", q)
