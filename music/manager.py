@@ -14,20 +14,26 @@ class MusicManager:
         self.queue = asyncio.Queue()
         self.now_playing = None
 
+        # =============================
+        # 🔥 HISTORY SYSTEM (FIX)
+        # =============================
+        self.history = []
+        self.played_from_playlist = []
+
         self.player: wavelink.Player | None = None
         self.lock = asyncio.Lock()
 
         self.message = None
         self.view = None
 
-        # Previous-track support
-        self.history = []
-
         self.last_active = time.time()
 
-        # autoplay / radio support
+        # autoplay
         self.radio_enabled = False
         self.radio_seed = None
+
+        # volume default
+        self.volume = 50
 
     # ---------------- STATE ----------------
     def touch(self):
@@ -43,21 +49,22 @@ class MusicManager:
 
         self.player = await channel.connect(cls=wavelink.Player)
 
-        log.info(
-            f"[Guild {self.guild_id}] Connected to voice channel"
-        )
+        try:
+            await self.player.set_volume(self.volume)
+        except Exception:
+            pass
 
+        log.info(f"[Guild {self.guild_id}] Connected to voice channel")
         return self.player
 
     # ---------------- ADD TRACK ----------------
-    async def add(self, track):
+    async def add(self, track, source="queue"):
         self.touch()
 
-        # seed autoplay from first track added
         if not self.radio_seed:
             self.radio_seed = getattr(track, "author", None)
 
-        await self.queue.put(track)
+        await self.queue.put((track, source))
 
         log.info(
             f"[Guild {self.guild_id}] Queued: "
@@ -74,94 +81,66 @@ class MusicManager:
             if not self.player:
                 return
 
-            track = None
+            item = None
 
             if not self.queue.empty():
-                track = await self.queue.get()
+                item = await self.queue.get()
 
-            if not track:
+            if not item:
                 self.now_playing = None
-
-                log.info(
-                    f"[Guild {self.guild_id}] Queue empty"
-                )
-
                 return
 
-            # Save current track into history
+            track, source = item
+
+            # =============================
+            # HISTORY FIX
+            # =============================
             if self.now_playing:
                 self.history.append(self.now_playing)
 
-                # Optional: cap history size
-                if len(self.history) > 50:
-                    self.history.pop(0)
+            if source == "playlist":
+                self.played_from_playlist.append(track)
 
             self.now_playing = track
             self.touch()
 
             try:
                 await self.player.play(track)
-
-                log.info(
-                    f"[Guild {self.guild_id}] Playing: "
-                    f"{getattr(track, 'title', 'Unknown')}"
-                )
-
             except Exception as e:
-                log.exception(
-                    f"[Guild {self.guild_id}] Failed to play track: {e}"
-                )
-
+                log.exception(f"Play failed: {e}")
                 self.now_playing = None
 
-    # ---------------- PREVIOUS ----------------
-    async def previous(self):
+    # ---------------- PREVIOUS TRACK ----------------
+    async def play_previous(self):
+        if not self.player:
+            return None
 
         if not self.history:
-            return False
+            return None
 
-        previous_track = self.history.pop()
+        previous = self.history.pop()
 
-        tracks = []
+        # push current back into queue front-safe
+        if self.now_playing:
+            await self.queue.put((self.now_playing, "history"))
 
-        while not self.queue.empty():
-            tracks.append(await self.queue.get())
+        self.now_playing = previous
 
-        # Put previous song first
-        await self.queue.put(previous_track)
+        try:
+            await self.player.play(previous)
+        except Exception as e:
+            log.error(f"History play failed: {e}")
 
-        # Restore remaining queue
-        for track in tracks:
-            await self.queue.put(track)
-
-        if self.player:
-            await self.player.stop()
-
-        log.info(
-            f"[Guild {self.guild_id}] Returning to previous track"
-        )
-
-        return True
+        return previous
 
     # ---------------- STOP ----------------
     async def stop(self):
-        """
-        Fully stop playback,
-        clear queue,
-        disconnect voice,
-        clean UI.
-        """
-
         self.touch()
 
         self.now_playing = None
-        self.history.clear()
-
-        # clear queue
         self.queue = asyncio.Queue()
-
-        # reset autoplay state
-        self.radio_seed = None
+        self.history.clear()
+        self.played_from_playlist.clear()
 
         try:
             if self.player:
@@ -183,30 +162,30 @@ class MusicManager:
             except Exception:
                 pass
 
-        log.info(
-            f"[Guild {self.guild_id}] Playback stopped"
-        )
-
     # ---------------- SHUFFLE ----------------
     async def shuffle(self):
-        """
-        Shuffle queued tracks while leaving
-        the currently playing track alone.
-        """
-
-        tracks = []
+        items = []
 
         while not self.queue.empty():
-            tracks.append(await self.queue.get())
+            items.append(await self.queue.get())
 
-        random.shuffle(tracks)
+        random.shuffle(items)
 
-        for track in tracks:
-            await self.queue.put(track)
+        for i in items:
+            await self.queue.put(i)
 
-        log.info(
-            f"[Guild {self.guild_id}] "
-            f"Shuffled {len(tracks)} tracks"
-        )
+        return len(items)
 
-        return len(tracks)
+    # ---------------- VOLUME FIX ----------------
+    async def set_volume(self, value: int):
+        self.volume = max(0, min(100, value))
+
+        if self.player:
+            try:
+                await self.player.set_volume(self.volume)
+            except Exception:
+                # fallback (older wavelink)
+                try:
+                    self.player.volume = self.volume
+                except Exception:
+                    pass
