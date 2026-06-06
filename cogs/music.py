@@ -6,18 +6,19 @@ import logging
 
 from music.manager import MusicManager
 from music.utils import create_bar
+from music.playlist_converter import PlaylistConverter
 from ui.player import PlayerView
 
 log = logging.getLogger("music")
-log.setLevel(logging.INFO)
 
 
 class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.players: dict[int, MusicManager] = {}
+        self.converter = PlaylistConverter()
 
-    # ---------------- SAFE PLAYER ACCESS (FIX) ----------------
+    # ---------------- PLAYER ACCESS ----------------
     def get_player(self, guild_id: int) -> MusicManager:
         if guild_id not in self.players:
             self.players[guild_id] = MusicManager(guild_id)
@@ -33,7 +34,7 @@ class Music(commands.Cog):
         except Exception as e:
             log.error(f"track_end error: {e}")
 
-    # ---------------- NOW PLAYING EMBED ----------------
+    # ---------------- EMBED ----------------
     def now_playing(self, track, position=0):
         duration = getattr(track, "length", 0)
         bar = create_bar(position, duration)
@@ -53,27 +54,9 @@ class Music(commands.Cog):
 
         return embed
 
-    # ---------------- LIVE UPDATER ----------------
-    async def start_progress_updater(self, guild_id: int):
-        gm = self.get_player(guild_id)
-
-        while gm and gm.player and gm.now_playing:
-            try:
-                pos = gm.player.position if gm.player else 0
-
-                embed = self.now_playing(gm.now_playing, pos)
-
-                if gm.message:
-                    await gm.message.edit(embed=embed, view=gm.view)
-
-                await asyncio.sleep(5)
-
-            except Exception:
-                break
-
-    # ---------------- PLAY COMMAND ----------------
-    @commands.hybrid_command(name="play")
-    async def play(self, ctx: commands.Context, *, query: str):
+    # ---------------- PLAYLIST COMMAND ----------------
+    @commands.hybrid_command(name="playlist")
+    async def playlist(self, ctx, url: str):
 
         if ctx.interaction:
             await ctx.interaction.response.defer()
@@ -83,34 +66,56 @@ class Music(commands.Cog):
 
         gm = self.get_player(ctx.guild.id)
 
-        try:
-            voice = ctx.voice_client
+        voice = ctx.voice_client
 
-            if not voice:
-                voice = await ctx.author.voice.channel.connect(cls=wavelink.Player)
-            else:
-                if voice.channel != ctx.author.voice.channel:
-                    await voice.move_to(ctx.author.voice.channel)
-
-        except Exception as e:
-            return await ctx.send(f"Voice error: {e}")
+        if not voice:
+            voice = await ctx.author.voice.channel.connect(cls=wavelink.Player)
 
         gm.player = voice
 
-        results = None
+        await ctx.send("📥 Converting playlist...")
 
-        for q in (f"ytsearch:{query}", f"scsearch:{query}"):
+        queries = await self.converter.convert(url)
+
+        if not queries:
+            return await ctx.send("❌ Could not extract playlist.")
+
+        count = 0
+
+        for q in queries:
 
             try:
-                results = await asyncio.wait_for(
-                    wavelink.Playable.search(q),
-                    timeout=10
-                )
-                if results:
-                    break
+                results = await wavelink.Playable.search(f"ytsearch:{q}")
 
-            except Exception as e:
-                log.warning(f"[SEARCH FAIL] {q}: {e}")
+                if results:
+                    await gm.add(results[0])
+                    count += 1
+
+            except Exception:
+                continue
+
+        await ctx.send(f"✅ Added {count} tracks")
+
+    # ---------------- PLAY ----------------
+    @commands.hybrid_command(name="play")
+    async def play(self, ctx, *, query: str):
+
+        if ctx.interaction:
+            await ctx.interaction.response.defer()
+
+        if not ctx.author.voice:
+            return await ctx.send("Join a voice channel first.")
+
+        gm = self.get_player(ctx.guild.id)
+
+        voice = ctx.voice_client
+
+        if not voice:
+            voice = await ctx.author.voice.channel.connect(cls=wavelink.Player)
+
+        gm.player = voice
+
+        results = await wavelink.Playable.search(f"ytsearch:{query}")
 
         if not results:
             return await ctx.send("No results found.")
@@ -118,9 +123,6 @@ class Music(commands.Cog):
         track = results[0]
 
         await gm.add(track)
-
-        if not gm.now_playing:
-            await gm.play_next()
 
         view = PlayerView(self.bot, ctx.guild.id)
 
@@ -134,82 +136,24 @@ class Music(commands.Cog):
 
         asyncio.create_task(self.start_progress_updater(ctx.guild.id))
 
-    # ---------------- VOTE SKIP ----------------
-    @commands.hybrid_command(name="voteskip")
-    async def voteskip(self, ctx):
-        gm = self.get_player(ctx.guild.id)
+    # ---------------- UI UPDATER ----------------
+    async def start_progress_updater(self, guild_id: int):
+        gm = self.get_player(guild_id)
 
-        if not gm.player:
-            return await ctx.send("Nothing playing.")
+        while gm and gm.player and gm.now_playing:
+            try:
+                pos = gm.player.position if gm.player else 0
 
-        if not ctx.author.voice:
-            return await ctx.send("Join voice first.")
+                if gm.message:
+                    await gm.message.edit(
+                        embed=self.now_playing(gm.now_playing, pos),
+                        view=gm.view
+                    )
 
-        gm.skip_votes.add(ctx.author.id)
+                await asyncio.sleep(5)
 
-        members = len([m for m in ctx.author.voice.channel.members if not m.bot])
-        needed = max(1, members // 2 + 1)
-
-        if len(gm.skip_votes) >= needed:
-            await gm.player.stop()
-            gm.skip_votes.clear()
-            return await ctx.send("⏭ Vote skip passed!")
-
-        await ctx.send(f"🗳 Votes: {len(gm.skip_votes)}/{needed}")
-
-    # ---------------- AUTOPLAY ----------------
-    @commands.hybrid_command(name="autoplay")
-    async def autoplay(self, ctx, query: str):
-        gm = self.get_player(ctx.guild.id)
-
-        gm.radio_enabled = True
-        gm.radio_seed = query
-
-        await ctx.send(f"📻 Autoplay enabled: **{query}**")
-
-    # ---------------- QUEUE ----------------
-    @commands.hybrid_command(name="queue")
-    async def queue(self, ctx):
-        gm = self.get_player(ctx.guild.id)
-
-        if gm.queue.empty() and not gm.now_playing:
-            return await ctx.send("Queue is empty.")
-
-        items = list(gm.queue._queue)[:10]
-
-        desc = ""
-
-        if gm.now_playing:
-            desc += f"🎧 Now: **{gm.now_playing.title}**\n\n"
-
-        for i, t in enumerate(items, 1):
-            desc += f"{i}. {t.title}\n"
-
-        await ctx.send(
-            embed=discord.Embed(
-                title="📜 Queue",
-                description=desc,
-                color=discord.Color.blurple()
-            )
-        )
-
-    # ---------------- SKIP ----------------
-    @commands.hybrid_command(name="skip")
-    async def skip(self, ctx):
-        gm = self.get_player(ctx.guild.id)
-
-        if gm.player:
-            await gm.player.stop()
-
-        await ctx.send("⏭ Skipped")
-
-    # ---------------- STOP ----------------
-    @commands.hybrid_command(name="stop")
-    async def stop(self, ctx):
-        gm = self.get_player(ctx.guild.id)
-
-        await gm.stop()
-        await ctx.send("⏹ Stopped")
+            except Exception:
+                break
 
 
 async def setup(bot: commands.Bot):
