@@ -33,6 +33,7 @@ class GuildMusic:
             return self.player
 
         self.player = await channel.connect(cls=wavelink.Player)
+        print("[DEBUG] Player connected")
         return self.player
 
     # ---------------- QUEUE ----------------
@@ -40,25 +41,33 @@ class GuildMusic:
         await self.queue.put(track)
         self.touch()
 
+        print(f"[DEBUG] Track added: {getattr(track, 'title', track)}")
+
         if not self.current:
             await self.play_next()
 
+    # ---------------- CONTROL ----------------
     async def skip(self):
         if self.player:
+            print("[DEBUG] Skip triggered")
             await self.player.stop()
 
     async def stop(self):
         if self.player:
+            print("[DEBUG] Stop triggered")
             await self.player.disconnect()
 
         self.player = None
         self.current = None
+
+        # reset queue properly
         self.queue = asyncio.Queue()
 
     # ---------------- CORE PLAYER ----------------
     async def play_next(self):
         async with self.lock:
-            if not self.player or not self.player.connected:
+            if not self.player:
+                print("[DEBUG] No player available")
                 return
 
             track = None
@@ -70,14 +79,22 @@ class GuildMusic:
             # radio fallback
             elif self.radio_enabled and self.radio_seed:
                 results = await wavelink.Playable.search(self.radio_seed)
+
                 if results:
                     track = random.choice(results[:10])
 
             if not track:
+                print("[DEBUG] No track to play")
                 self.current = None
                 return
 
             self.current = track
             self.touch()
 
-            await self.player.play(track)
+            print(f"[DEBUG] Now playing: {getattr(track, 'title', track)}")
+
+            try:
+                await self.player.play(track)
+            except Exception as e:
+                print("[ERROR] Failed to play track:", e)
+                self.current = None

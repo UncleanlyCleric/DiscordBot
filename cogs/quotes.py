@@ -5,9 +5,6 @@ from discord import app_commands
 from utils.db import add, fetch_random, search, delete, edit
 
 
-# =====================================================
-# QUOTES COG
-# =====================================================
 class Quotes(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -27,10 +24,21 @@ class Quotes(commands.Cog):
     # RAW MESSAGE ROUTER
     # =====================================================
     async def handle_raw_message(self, message: discord.Message):
-        if not message.guild:
+        if not message.guild or message.author.bot:
             return
 
         content = message.content.strip()
+
+        print(f"[QUOTES DEBUG] raw: {content}")
+
+        # =================================================
+        # 🚨 Ignore real bot commands to prevent conflicts
+        # =================================================
+        if content.startswith("!"):
+            cmd = content[1:].split(" ", 1)[0].lower()
+
+            if cmd in ["help", "play", "skip", "stop", "quote", "searchquote", "delquote", "editquote"]:
+                return
 
         # =================================================
         # ➕ !add<category> <text>
@@ -38,34 +46,43 @@ class Quotes(commands.Cog):
         if content.startswith("!add"):
             try:
                 raw = content[4:].strip()
-                parts = raw.split(maxsplit=1)
 
-                if len(parts) < 2:
-                    raise ValueError("missing args")
+                if not raw:
+                    await self.safe_send(message.channel, "Usage: `!add<category> <text>`")
+                    return
+
+                parts = raw.split(" ", 1)
+
+                if len(parts) != 2:
+                    await self.safe_send(message.channel, "Usage: `!add<category> <text>`")
+                    return
 
                 category, text = parts
+                category = category.lower().strip()
+
+                print(f"[QUOTES DEBUG] add -> category={category}, text={text}")
 
                 await add(
                     guild_id=message.guild.id,
-                    category=category.lower(),
+                    category=category,
                     content=text,
                     author_id=str(message.author.id)
                 )
 
-                await self.safe_send(message.channel, "✅ Quote added.")
+                await self.safe_send(message.channel, f"✅ Added to `{category}`")
 
-            except Exception:
-                await self.safe_send(message.channel, "Usage: `!add<category> <text>`")
+            except Exception as e:
+                self.bot.logger.error(f"ADD QUOTE ERROR: {e}")
+                await self.safe_send(message.channel, "❌ Failed to add quote.")
             return
 
         # =================================================
         # 💬 !<category>
         # =================================================
         if content.startswith("!") and len(content) > 1:
-            category = content[1:].strip().lower()
+            category = content[1:].split(" ", 1)[0].lower().strip()
 
-            if " " in category:
-                return
+            print(f"[QUOTES DEBUG] fetch category={category}")
 
             try:
                 result = await fetch_random(message.guild.id, category)
@@ -111,7 +128,7 @@ class Quotes(commands.Cog):
     async def slash_add(self, interaction: discord.Interaction, category: str, content: str):
         await add(
             interaction.guild.id,
-            category,
+            category.lower(),
             content,
             str(interaction.user.id)
         )
@@ -120,7 +137,7 @@ class Quotes(commands.Cog):
 
     @quote.command(name="get")
     async def slash_get(self, interaction: discord.Interaction, category: str):
-        result = await fetch_random(interaction.guild.id, category)
+        result = await fetch_random(interaction.guild.id, category.lower())
 
         if not result:
             return await interaction.response.send_message(
@@ -144,8 +161,5 @@ class Quotes(commands.Cog):
         await interaction.response.send_message(msg, ephemeral=True)
 
 
-# =====================================================
-# SETUP (FIXED)
-# =====================================================
 async def setup(bot: commands.Bot):
     await bot.add_cog(Quotes(bot))
