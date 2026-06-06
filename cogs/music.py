@@ -23,7 +23,7 @@ class Music(commands.Cog):
             self.players[guild_id] = MusicManager(guild_id)
         return self.players[guild_id]
 
-    # ---------------- EMBED (UPGRADED UI) ----------------
+    # ---------------- EMBED ----------------
     def now_playing(self, track, position=0):
         title = getattr(track, "title", "Unknown Title")
         author = getattr(track, "author", "Unknown Artist")
@@ -82,12 +82,14 @@ class Music(commands.Cog):
 
         for q in queries:
 
-            if not isinstance(q, str) or "http" in q:
+            if not isinstance(q, str):
                 continue
 
             try:
                 print("ABOUT TO SEARCH:", q)
+
                 results = await wavelink.Playable.search(q)
+
                 print("SEARCH FINISHED")
 
                 print("================================")
@@ -95,21 +97,38 @@ class Music(commands.Cog):
                 print("RESULT TYPE:", type(results))
                 print("RESULT COUNT:", len(results) if results else 0)
 
-                if results:
-                    track = results[0]
-
-                    print("TITLE:", getattr(track, "title", None))
-                    print("AUTHOR:", getattr(track, "author", None))
-                    print("IDENTIFIER:", getattr(track, "identifier", None))
-                    print("ENCODED:", getattr(track, "encoded", None))
-
                 print("================================")
 
                 if not results:
                     continue
 
-                await gm.add(results[0])
-                count += 1
+                # Playlist support
+                if hasattr(results, "tracks"):
+
+                    print(
+                        f"PLAYLIST DETECTED: "
+                        f"{len(results.tracks)} tracks"
+                    )
+
+                    for track in results.tracks:
+                        await gm.add(track)
+                        count += 1
+
+                # Single track
+                else:
+                    track = results[0]
+
+                    print(
+                        "TITLE:",
+                        getattr(track, "title", None)
+                    )
+                    print(
+                        "AUTHOR:",
+                        getattr(track, "author", None)
+                    )
+
+                    await gm.add(track)
+                    count += 1
 
             except Exception as e:
                 log.warning(f"[PLAY ERROR] {q} -> {e}")
@@ -167,7 +186,7 @@ class Music(commands.Cog):
 
         for q in queries:
 
-            if not isinstance(q, str) or "http" in q:
+            if not isinstance(q, str):
                 continue
 
             try:
@@ -177,27 +196,66 @@ class Music(commands.Cog):
                 print("SEARCH:", q)
                 print("RESULT TYPE:", type(results))
                 print("RESULT COUNT:", len(results) if results else 0)
-
-                if results:
-                    track = results[0]
-
-                    print("TITLE:", getattr(track, "title", None))
-                    print("AUTHOR:", getattr(track, "author", None))
-                    print("IDENTIFIER:", getattr(track, "identifier", None))
-                    print("ENCODED:", getattr(track, "encoded", None))
-
                 print("================================")
 
                 if not results:
                     continue
 
-                await gm.add(results[0])
-                count += 1
+                # Playlist support
+                if hasattr(results, "tracks"):
+
+                    print(
+                        f"PLAYLIST DETECTED: "
+                        f"{len(results.tracks)} tracks"
+                    )
+
+                    for track in results.tracks:
+                        await gm.add(track)
+                        count += 1
+
+                # Single track
+                else:
+                    track = results[0]
+
+                    print(
+                        "TITLE:",
+                        getattr(track, "title", None)
+                    )
+                    print(
+                        "AUTHOR:",
+                        getattr(track, "author", None)
+                    )
+
+                    await gm.add(track)
+                    count += 1
 
             except Exception as e:
                 log.warning(f"[PLAYLIST ERROR] {q} -> {e}")
 
         await ctx.send(f"✅ Added {count} tracks")
+
+    # ---------------- TRACK END ----------------
+    @commands.Cog.listener()
+    async def on_wavelink_track_end(
+        self,
+        payload: wavelink.TrackEndEventPayload
+    ):
+
+        player = payload.player
+
+        if not player:
+            return
+
+        guild = player.guild
+
+        if not guild:
+            return
+
+        gm = self.get_player(guild.id)
+
+        gm.now_playing = None
+
+        await gm.play_next()
 
     # ---------------- UI UPDATER ----------------
     async def start_progress_updater(self, guild_id: int):
