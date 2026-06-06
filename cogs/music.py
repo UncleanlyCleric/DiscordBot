@@ -84,15 +84,39 @@ class Music(commands.Cog):
 
         for q in queries:
             try:
+                # music-optimized search
                 results = await wavelink.Playable.search(f"ytmsearch:{q}")
 
-                if results:
-                    track = results[0]
-                    await gm.add(track)
-                    count += 1
+                if not results:
+                    continue
 
-                    # prevents rate spikes + improves stability
-                    await asyncio.sleep(0.2)
+                # ---------------- SMART PICK ----------------
+                track = None
+
+                for r in results[:5]:
+                    title = getattr(r, "title", "").lower()
+
+                    bad_keywords = [
+                        "focus",
+                        "sleep",
+                        "ambient",
+                        "study",
+                        "relax",
+                        "meditation",
+                        "lofi radio"
+                    ]
+
+                    if not any(b in title for b in bad_keywords):
+                        track = r
+                        break
+
+                if not track:
+                    track = results[0]
+
+                await gm.add(track)
+                count += 1
+
+                await asyncio.sleep(0.2)
 
             except Exception as e:
                 log.error(f"playlist search error: {e}")
