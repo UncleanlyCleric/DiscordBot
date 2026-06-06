@@ -20,7 +20,7 @@ class Music(commands.Cog):
         self.bot = bot
 
     # =====================================================
-    # TRACK END (SAFE)
+    # TRACK END
     # =====================================================
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, payload):
@@ -46,12 +46,14 @@ class Music(commands.Cog):
         return embed
 
     # =====================================================
-    # PLAY (FULL FIX)
+    # PLAY (FULL FIXED VERSION)
     # =====================================================
     @commands.hybrid_command(name="play")
     async def play(self, ctx: commands.Context, *, query: str):
 
-        # 🔥 FIX: slash timeout prevention
+        # =========================
+        # SLASH TIMEOUT FIX
+        # =========================
         if ctx.interaction:
             await ctx.interaction.response.defer()
 
@@ -61,16 +63,26 @@ class Music(commands.Cog):
         gm = get_player(ctx.guild.id)
 
         # =====================================================
-        # SAFE VOICE HANDLING
+        # ⚡ FAST + SAFE VOICE CONNECT FIX (30s delay fix)
         # =====================================================
         voice = ctx.voice_client
 
-        if not voice:
-            voice = await ctx.author.voice.channel.connect(cls=wavelink.Player)
+        try:
+            # fast path: reuse connection
+            if voice and voice.is_connected():
+                if voice.channel != ctx.author.voice.channel:
+                    await voice.move_to(ctx.author.voice.channel)
+            else:
+                # clean connect with timeout guard
+                voice = await asyncio.wait_for(
+                    ctx.author.voice.channel.connect(cls=wavelink.Player),
+                    timeout=10
+                )
 
-        else:
-            if voice.channel != ctx.author.voice.channel:
-                await voice.move_to(ctx.author.voice.channel)
+        except asyncio.TimeoutError:
+            return await ctx.send("❌ Voice connection timed out.")
+        except Exception as e:
+            return await ctx.send(f"❌ Voice error: {e}")
 
         gm.player = voice
 
@@ -85,7 +97,7 @@ class Music(commands.Cog):
                 timeout=10
             )
         except asyncio.TimeoutError:
-            return await ctx.send("Search timed out.")
+            return await ctx.send("❌ Search timed out.")
 
         if not results:
             return await ctx.send("No results found.")
@@ -94,6 +106,9 @@ class Music(commands.Cog):
 
         await gm.add(track)
 
+        # =====================================================
+        # START PLAYBACK IF NEEDED
+        # =====================================================
         if not gm.now_playing:
             await gm.play_next()
 
