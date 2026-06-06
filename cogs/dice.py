@@ -4,21 +4,21 @@ from discord.ext import commands
 import random
 import re
 
+
 class Dice(commands.Cog):
-DICE_REGEX = re.compile(
-r"(?P<count>\d{1,3})?d(?P<sides>\d{1,4})"
-r"(?P<keep>(kh|kl)\d+)?"
-r"(?P<adv>[ad])?"
-r"(?P<modifier>[+-]\d+)?$",
-re.IGNORECASE
-)
+    DICE_REGEX = re.compile(
+        r"(?P<count>\d{1,3})?d(?P<sides>\d{1,4})"
+        r"(?P<keep>(kh|kl)\d+)?"
+        r"(?P<adv>[ad])?"
+        r"(?P<modifier>[+-]\d+)?$",
+        re.IGNORECASE
+    )
 
-```
-MAX_DICE = 100
-MAX_SIDES = 1000
+    MAX_DICE = 100
+    MAX_SIDES = 1000
 
-def __init__(self, bot: commands.Bot):
-    self.bot = bot
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
 
 def roll_dice(self, count: int, sides: int):
     return [random.randint(1, sides) for _ in range(count)]
@@ -202,10 +202,10 @@ async def roll(
             text="Disadvantage"
         )
 
-    await interaction.response.send_message(
-        embed=embed
-    )
-```
+        await interaction.response.send_message(
+            embed=embed
+        )
+
 
 async def setup(bot: commands.Bot):
-await bot.add_cog(Dice(bot))
+    await bot.add_cog(Dice(bot))
