@@ -145,9 +145,7 @@ class Quotes(commands.Cog):
 
 
 # =====================================================
-# SETUP
+# SETUP (FIXED)
 # =====================================================
 async def setup(bot: commands.Bot):
-    cog = Quotes(bot)
-    await bot.add_cog(cog)
-    bot.tree.add_command(cog.quote)
+    await bot.add_cog(Quotes(bot))
