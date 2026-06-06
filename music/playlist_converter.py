@@ -4,8 +4,8 @@ from urllib.parse import urlparse
 
 class PlaylistConverter:
     """
-    Converts playlist URLs into music-focused search queries.
-    Works best-effort without Apple/Spotify APIs.
+    Converts playlist URLs into STRICT music-track search queries.
+    Designed to avoid "focus music / lofi / study mix" results.
     """
 
     def detect_source(self, url: str):
@@ -28,27 +28,25 @@ class PlaylistConverter:
 
     # ---------------- YOUTUBE ----------------
     async def _youtube(self, url: str):
-        # Lavalink can directly handle YouTube playlists
+        # Lavalink handles playlist directly
         return [url]
 
-    # ---------------- APPLE MUSIC (FIXED) ----------------
+    # ---------------- APPLE MUSIC (FINAL FIX) ----------------
     async def _apple(self, url: str):
         """
         FINAL FIX:
-        We do NOT try to extract meaning from Apple URL structure
-        (it produces garbage like "field trip waterfall").
-
-        Instead, we generate controlled music-intent queries.
+        No playlist semantics.
+        No generic music terms.
+        ONLY track-level search intent.
         """
 
         path = urlparse(url).path
         parts = [p for p in path.split("/") if p]
 
-        # try to grab a human-readable segment (best-effort only)
-        raw_name = ""
+        name = None
 
         for p in parts:
-            # ignore Apple playlist IDs
+            # skip Apple playlist IDs
             if "pl." in p or p.startswith("pl"):
                 continue
 
@@ -56,25 +54,21 @@ class PlaylistConverter:
             cleaned = re.sub(r"[0-9]+", "", cleaned).strip()
 
             if len(cleaned) > 2:
-                raw_name = cleaned
+                name = cleaned
                 break
 
-        # fallback if Apple gives nothing usable
-        if not raw_name:
-            raw_name = "top hits"
+        # fallback safety
+        if not name:
+            name = "pop"
 
-        # normalize
-        raw_name = raw_name.strip()
+        name = name.strip()
 
-        base = f"{raw_name} song"
-
-        # IMPORTANT: force music intent (no nature / travel / ambience traps)
+        # 🔥 STRICT TRACK-LEVEL QUERIES ONLY
         return [
-            base,
-            f"{raw_name} official audio",
-            f"{raw_name} music",
-            "top hits 2026 songs",
-            "popular music playlist 2026"
+            f"{name} official audio",
+            f"{name} song",
+            f"{name} lyrics",
+            f"{name} audio"
         ]
 
     # ---------------- FALLBACK ----------------
