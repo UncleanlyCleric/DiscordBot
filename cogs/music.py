@@ -130,6 +130,35 @@ class Music(commands.Cog):
         await ctx.send(embed=self.now_playing(track))
 
     # =====================================================
+    # VOICE TEST
+    # =====================================================
+    @commands.command()
+    async def voicetest(self, ctx):
+
+        if not ctx.author.voice:
+            return await ctx.send("Join a voice channel first.")
+
+        log.info("VOICE TEST START")
+        log.info("BEFORE CONNECT")
+
+        try:
+            vc = await ctx.author.voice.channel.connect()
+
+            log.info("AFTER CONNECT")
+
+            await ctx.send("Connected successfully")
+
+            await asyncio.sleep(2)
+
+            await vc.disconnect()
+
+            log.info("VOICE TEST END")
+
+        except Exception as e:
+            log.error(f"VOICE TEST ERROR: {e}")
+            await ctx.send(f"Voice test failed: {e}")
+
+    # =====================================================
     # SKIP
     # =====================================================
     @commands.hybrid_command(name="skip")
