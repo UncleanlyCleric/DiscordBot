@@ -4,8 +4,8 @@ from urllib.parse import urlparse
 
 class PlaylistConverter:
     """
-    Converts playlist URLs (Apple Music / YouTube / generic)
-    into search queries for Lavalink (YouTube fallback).
+    Converts playlist URLs into music-focused search queries.
+    Works best-effort without Apple/Spotify APIs.
     """
 
     def detect_source(self, url: str):
@@ -28,44 +28,53 @@ class PlaylistConverter:
 
     # ---------------- YOUTUBE ----------------
     async def _youtube(self, url: str):
-        # Lavalink can handle playlists directly
+        # Lavalink can directly handle YouTube playlists
         return [url]
 
     # ---------------- APPLE MUSIC (FIXED) ----------------
     async def _apple(self, url: str):
         """
-        Apple Music cannot be reliably scraped.
-        We convert the URL into multiple strong YouTube search seeds.
+        FINAL FIX:
+        We do NOT try to extract meaning from Apple URL structure
+        (it produces garbage like "field trip waterfall").
+
+        Instead, we generate controlled music-intent queries.
         """
 
         path = urlparse(url).path
         parts = [p for p in path.split("/") if p]
 
-        seed_parts = []
+        # try to grab a human-readable segment (best-effort only)
+        raw_name = ""
 
         for p in parts:
-            # skip Apple playlist IDs like pl.u-xxxx
-            if p.startswith("pl.") or "pl." in p:
+            # ignore Apple playlist IDs
+            if "pl." in p or p.startswith("pl"):
                 continue
 
             cleaned = re.sub(r"[-_]+", " ", p)
             cleaned = re.sub(r"[0-9]+", "", cleaned).strip()
 
             if len(cleaned) > 2:
-                seed_parts.append(cleaned)
+                raw_name = cleaned
+                break
 
-        # fallback if Apple gives nothing useful
-        if not seed_parts:
-            seed_parts = [parts[-2]] if len(parts) >= 2 else [url]
+        # fallback if Apple gives nothing usable
+        if not raw_name:
+            raw_name = "top hits"
 
-        base = " ".join(seed_parts).strip()
+        # normalize
+        raw_name = raw_name.strip()
 
-        # IMPORTANT: expand into multiple queries (this is what makes it work)
+        base = f"{raw_name} song"
+
+        # IMPORTANT: force music intent (no nature / travel / ambience traps)
         return [
             base,
-            f"{base} playlist",
-            f"{base} mix",
-            f"{base} songs"
+            f"{raw_name} official audio",
+            f"{raw_name} music",
+            "top hits 2026 songs",
+            "popular music playlist 2026"
         ]
 
     # ---------------- FALLBACK ----------------
