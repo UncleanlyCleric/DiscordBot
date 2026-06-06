@@ -2,6 +2,7 @@ import asyncio
 import time
 import logging
 import wavelink
+import random
 
 log = logging.getLogger("music")
 
@@ -144,3 +145,26 @@ class MusicManager:
         log.info(
             f"[Guild {self.guild_id}] Playback stopped"
         )
+            # ---------------- SHUFFLE ----------------
+    async def shuffle(self):
+        """
+        Shuffle queued tracks while leaving
+        the currently playing track alone.
+        """
+
+        tracks = []
+
+        while not self.queue.empty():
+            tracks.append(await self.queue.get())
+
+        random.shuffle(tracks)
+
+        for track in tracks:
+            await self.queue.put(track)
+
+        log.info(
+            f"[Guild {self.guild_id}] "
+            f"Shuffled {len(tracks)} tracks"
+        )
+
+        return len(tracks)

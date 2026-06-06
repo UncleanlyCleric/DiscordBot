@@ -3,6 +3,7 @@ from discord.ext import commands
 import wavelink
 import asyncio
 import logging
+import random
 
 from music.manager import MusicManager
 from music.playlist_converter import PlaylistConverter
@@ -22,6 +23,18 @@ class Music(commands.Cog):
         if guild_id not in self.players:
             self.players[guild_id] = MusicManager(guild_id)
         return self.players[guild_id]
+
+    # ---------------- SHUFFLE ----------------
+    @commands.hybrid_command(name="shuffle")
+    async def shuffle(self, ctx):
+
+        gm = self.get_player(ctx.guild.id)
+
+        count = await gm.shuffle()
+
+        await ctx.send(
+            f"🔀 Shuffled {count} tracks."
+        )
 
     # ---------------- EMBED ----------------
     def now_playing(self, track, position=0):
@@ -96,7 +109,6 @@ class Music(commands.Cog):
                 print("SEARCH:", q)
                 print("RESULT TYPE:", type(results))
                 print("RESULT COUNT:", len(results) if results else 0)
-
                 print("================================")
 
                 if not results:
@@ -157,7 +169,12 @@ class Music(commands.Cog):
 
     # ---------------- PLAYLIST ----------------
     @commands.hybrid_command(name="playlist")
-    async def playlist(self, ctx, url: str):
+    async def playlist(
+        self,
+        ctx,
+        url: str,
+        shuffle: bool = False
+    ):
 
         if ctx.interaction:
             await ctx.interaction.response.defer()
@@ -183,6 +200,7 @@ class Music(commands.Cog):
             return await ctx.send("No tracks found.")
 
         count = 0
+        tracks_to_add = []
 
         for q in queries:
 
@@ -210,8 +228,7 @@ class Music(commands.Cog):
                     )
 
                     for track in results.tracks:
-                        await gm.add(track)
-                        count += 1
+                        tracks_to_add.append(track)
 
                 # Single track
                 else:
@@ -226,11 +243,17 @@ class Music(commands.Cog):
                         getattr(track, "author", None)
                     )
 
-                    await gm.add(track)
-                    count += 1
+                    tracks_to_add.append(track)
 
             except Exception as e:
                 log.warning(f"[PLAYLIST ERROR] {q} -> {e}")
+
+        if shuffle:
+            random.shuffle(tracks_to_add)
+
+        for track in tracks_to_add:
+            await gm.add(track)
+            count += 1
 
         await ctx.send(f"✅ Added {count} tracks")
 

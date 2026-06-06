@@ -11,8 +11,15 @@ class PlayerView(discord.ui.View):
         cog = self.bot.get_cog("Music")
         return cog.get_player(self.guild_id)
 
-    @discord.ui.button(label="⏯", style=discord.ButtonStyle.primary)
-    async def play_pause(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="⏯",
+        style=discord.ButtonStyle.primary
+    )
+    async def play_pause(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         gm = self.gm()
 
         if not gm.player:
@@ -25,8 +32,15 @@ class PlayerView(discord.ui.View):
 
         await interaction.response.defer()
 
-    @discord.ui.button(label="⏭", style=discord.ButtonStyle.secondary)
-    async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="⏭",
+        style=discord.ButtonStyle.secondary
+    )
+    async def skip(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         gm = self.gm()
 
         if gm.player:
@@ -34,9 +48,35 @@ class PlayerView(discord.ui.View):
 
         await interaction.response.defer()
 
-    @discord.ui.button(label="🔁", style=discord.ButtonStyle.success)
-    async def loop(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="🔀",
+        style=discord.ButtonStyle.secondary
+    )
+    async def shuffle(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         gm = self.gm()
+
+        count = await gm.shuffle()
+
+        await interaction.response.send_message(
+            f"🔀 Shuffled {count} tracks.",
+            ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="🔁",
+        style=discord.ButtonStyle.success
+    )
+    async def loop(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+        gm = self.gm()
+
         gm.radio_enabled = not gm.radio_enabled
 
         await interaction.response.send_message(
@@ -44,8 +84,17 @@ class PlayerView(discord.ui.View):
             ephemeral=True
         )
 
-    @discord.ui.button(label="⏹", style=discord.ButtonStyle.danger)
-    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="⏹",
+        style=discord.ButtonStyle.danger
+    )
+    async def stop(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         gm = self.gm()
+
         await gm.stop()
+
         await interaction.response.defer()
