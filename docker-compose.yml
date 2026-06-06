@@ -3,52 +3,37 @@ version: "3.9"
 services:
   lavalink:
     image: ghcr.io/lavalink-devs/lavalink:4
-
     container_name: lavalink
 
     ports:
       - "8080:8080"
 
+    volumes:
+      - ./application.yml:/opt/Lavalink/application.yml:ro
+
     environment:
       - _JAVA_OPTIONS=-Xmx1G
 
-    volumes:
-      # Lavalink config
-      - ./application.yml:/opt/Lavalink/application.yml:ro
-
-      # Plugins folder (IMPORTANT for YouTube fix via Lavasrc)
-      - ./plugins:/opt/Lavalink/plugins
-
     restart: unless-stopped
 
-    networks:
-      - botnet
 
   bot:
     build: .
-
     container_name: discord-bot
-
     depends_on:
       - lavalink
 
     working_dir: /app
 
+    # ✅ CRITICAL FIX: live-mount entire project
     volumes:
-      - ./data:/app/data
+      - ./:/app
 
     environment:
-      DISCORD_TOKEN: ${DISCORD_TOKEN}
-      LAVALINK_URI: http://lavalink:8080
-      LAVALINK_PASSWORD: youshallnotpass
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - LAVALINK_URI=http://lavalink:8080
+      - LAVALINK_PASSWORD=youshallnotpass
 
     command: python bot.py
 
     restart: unless-stopped
-
-    networks:
-      - botnet
-
-networks:
-  botnet:
-    driver: bridge

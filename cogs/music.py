@@ -17,11 +17,69 @@ class Music(commands.Cog):
         self.players: dict[int, MusicManager] = {}
         self.converter = PlaylistConverter()
 
-    # ---------------- PLAYER ----------------
     def get_player(self, guild_id: int) -> MusicManager:
         if guild_id not in self.players:
             self.players[guild_id] = MusicManager(guild_id)
         return self.players[guild_id]
+
+    # ---------------- PLAY ----------------
+    @commands.hybrid_command(name="play")
+    async def play(self, ctx, *, query: str):
+
+        if ctx.interaction:
+            await ctx.interaction.response.defer()
+
+        if not ctx.author.voice:
+            return await ctx.send("Join a voice channel first.")
+
+        gm = self.get_player(ctx.guild.id)
+
+        voice = ctx.voice_client
+        if not voice:
+            voice = await ctx.author.voice.channel.connect(cls=wavelink.Player)
+
+        gm.player = voice
+
+        # 🔥 FIX: ALWAYS run through converter first
+        queries = await self.converter.convert(query)
+
+        if not queries:
+            return await ctx.send("No results found.")
+
+        count = 0
+
+        for q in queries:
+
+            # 🚨 HARD GUARD: never allow URLs
+            if not isinstance(q, str) or "http" in q:
+                continue
+
+            try:
+                results = await wavelink.Playable.search(q)
+
+                if not results:
+                    continue
+
+                await gm.add(results[0])
+                count += 1
+
+            except Exception as e:
+                log.warning(f"play search failed: {q} -> {e}")
+
+        await ctx.send(f"🎧 Added {count} track(s)")
+
+        view = PlayerView(self.bot, ctx.guild.id)
+        msg = await ctx.send(
+            embed=discord.Embed(
+                title="🎧 Player Ready",
+                description="Controls active",
+                color=discord.Color.green()
+            ),
+            view=view
+        )
+
+        gm.message = msg
+        gm.view = view
 
     # ---------------- PLAYLIST ----------------
     @commands.hybrid_command(name="playlist")
@@ -46,14 +104,13 @@ class Music(commands.Cog):
         queries = await self.converter.convert(url)
 
         if not queries:
-            return await ctx.send("❌ No valid tracks found.")
+            return await ctx.send("No tracks found.")
 
         count = 0
 
         for q in queries:
 
-            # 🚨 HARD SAFETY: NEVER allow URLs
-            if "http" in q:
+            if not isinstance(q, str) or "http" in q:
                 continue
 
             try:
@@ -66,56 +123,11 @@ class Music(commands.Cog):
                 count += 1
 
             except Exception as e:
-                log.warning(f"playlist item failed: {q} -> {e}")
-                continue
+                log.warning(f"playlist failed: {q} -> {e}")
 
         await ctx.send(f"✅ Added {count} tracks")
 
-    # ---------------- PLAY ----------------
-    @commands.hybrid_command(name="play")
-    async def play(self, ctx, *, query: str):
-
-        if ctx.interaction:
-            await ctx.interaction.response.defer()
-
-        if not ctx.author.voice:
-            return await ctx.send("Join a voice channel first.")
-
-        gm = self.get_player(ctx.guild.id)
-
-        voice = ctx.voice_client
-        if not voice:
-            voice = await ctx.author.voice.channel.connect(cls=wavelink.Player)
-
-        gm.player = voice
-
-        # 🚨 FIX: no ytmsearch prefix
-        results = await wavelink.Playable.search(query)
-
-        if not results:
-            return await ctx.send("No results found.")
-
-        track = results[0]
-
-        await gm.add(track)
-
-        view = PlayerView(self.bot, ctx.guild.id)
-
-        msg = await ctx.send(
-            embed=discord.Embed(
-                title="🎧 Now Playing",
-                description=track.title,
-                color=discord.Color.green()
-            ),
-            view=view
-        )
-
-        gm.message = msg
-        gm.view = view
-
-        asyncio.create_task(self.start_progress_updater(ctx.guild.id))
-
-    # ---------------- UI ----------------
+    # ---------------- UI UPDATER ----------------
     async def start_progress_updater(self, guild_id: int):
         gm = self.get_player(guild_id)
 
