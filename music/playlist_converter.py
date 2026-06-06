@@ -1,5 +1,7 @@
 import re
 from urllib.parse import urlparse, unquote
+import requests
+from bs4 import BeautifulSoup
 
 
 class PlaylistConverter:
@@ -28,40 +30,65 @@ class PlaylistConverter:
 
     # ---------------- YOUTUBE ----------------
     async def _youtube(self, url: str):
-        # Lavalink can handle playlist URLs directly
+        # Lavalink handles playlist URLs directly
         return [url]
 
-    # ---------------- APPLE MUSIC ----------------
+    # ---------------- APPLE MUSIC (FIXED) ----------------
     async def _apple(self, url: str):
         """
-        Apple Music has no open API for track extraction.
-        We extract readable keywords from URL path.
+        Improved Apple Music resolver:
+        - tries to extract playlist title from HTML
+        - falls back to URL parsing if blocked
         """
 
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0"
+            }
+
+            html = requests.get(url, headers=headers, timeout=10).text
+            soup = BeautifulSoup(html, "html.parser")
+
+            # Try extracting real title
+            title = soup.title.string if soup.title else ""
+
+            if title:
+                title = re.sub(r"-.*Apple Music.*", "", title).strip()
+                title = re.sub(r"\s+", " ", title)
+
+                if title:
+                    return [title]
+
+        except Exception as e:
+            print("[APPLE PARSE FAIL]", e)
+
+        # ---------------- FALLBACK (URL BASED) ----------------
         parsed = urlparse(url)
         path = unquote(parsed.path)
 
-        # remove noise words
         path = re.sub(r"playlist|album|music|apple|com", "", path, flags=re.I)
 
-        # split into tokens
         tokens = [t for t in path.split("/") if t]
 
-        if not tokens:
-            return []
-
-        # build search queries
         queries = []
 
         for t in tokens:
             cleaned = re.sub(r"[-_]+", " ", t).strip()
+            cleaned = re.sub(r"\s+", " ", cleaned)
+
             if len(cleaned) > 2:
                 queries.append(cleaned)
+
+        # final safety fallback
+        if not queries:
+            fallback = url.split("/")[-1].replace("-", " ").strip()
+            queries = [fallback]
 
         return queries
 
     # ---------------- FALLBACK ----------------
     def _fallback(self, url: str):
         cleaned = re.sub(r"https?://", "", url)
-        cleaned = re.sub(r"www\\.", "", cleaned)
-        return cleaned.replace("/", " ").strip()
+        cleaned = re.sub(r"www\.", "", cleaned)
+        cleaned = cleaned.replace("/", " ").strip()
+        return cleaned
