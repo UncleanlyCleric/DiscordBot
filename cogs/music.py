@@ -167,7 +167,7 @@ class Music(commands.Cog):
             self.start_progress_updater(ctx.guild.id)
         )
 
-    # ---------------- PLAYLIST ----------------
+        # ---------------- PLAYLIST ----------------
     @commands.hybrid_command(name="playlist")
     async def playlist(
         self,
@@ -257,6 +257,34 @@ class Music(commands.Cog):
 
         await ctx.send(f"✅ Added {count} tracks")
 
+        # Remove old player panel if one exists
+        if gm.message:
+            try:
+                await gm.message.delete()
+            except Exception:
+                pass
+
+        # Create player controls just like /play
+        view = PlayerView(self.bot, ctx.guild.id)
+
+        msg = await ctx.send(
+            embed=self.now_playing(gm.now_playing, 0)
+            if gm.now_playing
+            else discord.Embed(
+                title="🎧 Player Ready",
+                description="Playlist queued",
+                color=discord.Color.green()
+            ),
+            view=view
+        )
+
+        gm.message = msg
+        gm.view = view
+
+        asyncio.create_task(
+            self.start_progress_updater(ctx.guild.id)
+        )
+        
     # ---------------- TRACK END ----------------
     @commands.Cog.listener()
     async def on_wavelink_track_end(
