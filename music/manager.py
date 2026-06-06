@@ -20,6 +20,9 @@ class MusicManager:
         self.message = None
         self.view = None
 
+        # Previous-track support
+        self.history = []
+
         self.last_active = time.time()
 
         # autoplay / radio support
@@ -85,6 +88,14 @@ class MusicManager:
 
                 return
 
+            # Save current track into history
+            if self.now_playing:
+                self.history.append(self.now_playing)
+
+                # Optional: cap history size
+                if len(self.history) > 50:
+                    self.history.pop(0)
+
             self.now_playing = track
             self.touch()
 
@@ -103,6 +114,35 @@ class MusicManager:
 
                 self.now_playing = None
 
+    # ---------------- PREVIOUS ----------------
+    async def previous(self):
+
+        if not self.history:
+            return False
+
+        previous_track = self.history.pop()
+
+        tracks = []
+
+        while not self.queue.empty():
+            tracks.append(await self.queue.get())
+
+        # Put previous song first
+        await self.queue.put(previous_track)
+
+        # Restore remaining queue
+        for track in tracks:
+            await self.queue.put(track)
+
+        if self.player:
+            await self.player.stop()
+
+        log.info(
+            f"[Guild {self.guild_id}] Returning to previous track"
+        )
+
+        return True
+
     # ---------------- STOP ----------------
     async def stop(self):
         """
@@ -115,6 +155,7 @@ class MusicManager:
         self.touch()
 
         self.now_playing = None
+        self.history.clear()
 
         # clear queue
         self.queue = asyncio.Queue()
@@ -145,7 +186,8 @@ class MusicManager:
         log.info(
             f"[Guild {self.guild_id}] Playback stopped"
         )
-            # ---------------- SHUFFLE ----------------
+
+    # ---------------- SHUFFLE ----------------
     async def shuffle(self):
         """
         Shuffle queued tracks while leaving

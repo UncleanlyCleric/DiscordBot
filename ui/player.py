@@ -11,6 +11,29 @@ class PlayerView(discord.ui.View):
         cog = self.bot.get_cog("Music")
         return cog.get_player(self.guild_id)
 
+    # ---------------- PREVIOUS ----------------
+    @discord.ui.button(
+        label="⏮",
+        style=discord.ButtonStyle.secondary
+    )
+    async def previous(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+        gm = self.gm()
+
+        ok = await gm.previous()
+
+        if ok:
+            await interaction.response.defer()
+        else:
+            await interaction.response.send_message(
+                "No previous track.",
+                ephemeral=True
+            )
+
+    # ---------------- PLAY / PAUSE ----------------
     @discord.ui.button(
         label="⏯",
         style=discord.ButtonStyle.primary
@@ -32,6 +55,7 @@ class PlayerView(discord.ui.View):
 
         await interaction.response.defer()
 
+    # ---------------- SKIP ----------------
     @discord.ui.button(
         label="⏭",
         style=discord.ButtonStyle.secondary
@@ -48,6 +72,7 @@ class PlayerView(discord.ui.View):
 
         await interaction.response.defer()
 
+    # ---------------- SHUFFLE ----------------
     @discord.ui.button(
         label="🔀",
         style=discord.ButtonStyle.secondary
@@ -66,6 +91,7 @@ class PlayerView(discord.ui.View):
             ephemeral=True
         )
 
+    # ---------------- AUTOPLAY / RADIO ----------------
     @discord.ui.button(
         label="🔁",
         style=discord.ButtonStyle.success
@@ -80,10 +106,11 @@ class PlayerView(discord.ui.View):
         gm.radio_enabled = not gm.radio_enabled
 
         await interaction.response.send_message(
-            f"Autoplay: {gm.radio_enabled}",
+            f"Autoplay: {'Enabled' if gm.radio_enabled else 'Disabled'}",
             ephemeral=True
         )
 
+    # ---------------- STOP ----------------
     @discord.ui.button(
         label="⏹",
         style=discord.ButtonStyle.danger
