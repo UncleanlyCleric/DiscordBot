@@ -4,8 +4,8 @@ from urllib.parse import urlparse
 
 class PlaylistConverter:
     """
-    Converts playlist URLs into STRICT music-track search queries.
-    Designed to avoid "focus music / lofi / study mix" results.
+    Converts playlist URLs into SAFE YouTube search queries.
+    Never returns URLs — ONLY text queries.
     """
 
     def detect_source(self, url: str):
@@ -19,25 +19,18 @@ class PlaylistConverter:
         source = self.detect_source(url)
 
         if source == "youtube":
-            return await self._youtube(url)
+            return [url]  # safe: Lavalink handles playlists
 
         if source == "apple":
             return await self._apple(url)
 
         return [self._fallback(url)]
 
-    # ---------------- YOUTUBE ----------------
-    async def _youtube(self, url: str):
-        # Lavalink handles playlist directly
-        return [url]
-
-    # ---------------- APPLE MUSIC (FINAL FIX) ----------------
+    # ---------------- APPLE MUSIC ----------------
     async def _apple(self, url: str):
         """
-        FINAL FIX:
-        No playlist semantics.
-        No generic music terms.
-        ONLY track-level search intent.
+        Apple Music has no public API.
+        We generate ONLY safe search queries.
         """
 
         path = urlparse(url).path
@@ -46,7 +39,6 @@ class PlaylistConverter:
         name = None
 
         for p in parts:
-            # skip Apple playlist IDs
             if "pl." in p or p.startswith("pl"):
                 continue
 
@@ -57,18 +49,17 @@ class PlaylistConverter:
                 name = cleaned
                 break
 
-        # fallback safety
         if not name:
-            name = "pop"
+            name = "pop songs"
 
         name = name.strip()
 
-        # 🔥 STRICT TRACK-LEVEL QUERIES ONLY
+        # 🚨 MUST be search-only text (NO URLs, NO playlist words)
         return [
             f"{name} official audio",
             f"{name} song",
-            f"{name} lyrics",
-            f"{name} audio"
+            f"{name} music",
+            f"{name} topic"
         ]
 
     # ---------------- FALLBACK ----------------

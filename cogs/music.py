@@ -5,7 +5,6 @@ import asyncio
 import logging
 
 from music.manager import MusicManager
-from music.utils import create_bar
 from music.playlist_converter import PlaylistConverter
 from ui.player import PlayerView
 
@@ -18,43 +17,13 @@ class Music(commands.Cog):
         self.players: dict[int, MusicManager] = {}
         self.converter = PlaylistConverter()
 
-    # ---------------- PLAYER ACCESS ----------------
+    # ---------------- PLAYER ----------------
     def get_player(self, guild_id: int) -> MusicManager:
         if guild_id not in self.players:
             self.players[guild_id] = MusicManager(guild_id)
         return self.players[guild_id]
 
-    # ---------------- TRACK END ----------------
-    @commands.Cog.listener()
-    async def on_wavelink_track_end(self, payload):
-        try:
-            gm = self.get_player(payload.player.guild.id)
-            gm.player = payload.player
-            await gm.play_next()
-        except Exception as e:
-            log.error(f"track_end error: {e}")
-
-    # ---------------- EMBED ----------------
-    def now_playing(self, track, position=0):
-        duration = getattr(track, "length", 0)
-        bar = create_bar(position, duration)
-
-        embed = discord.Embed(
-            title="🎧 Now Playing",
-            description=f"**{track.title}**",
-            color=discord.Color.green()
-        )
-
-        embed.add_field(name="Progress", value=f"`{bar}`", inline=False)
-        embed.add_field(
-            name="Time",
-            value=f"{int(position/1000)}s / {int(duration/1000)}s",
-            inline=True
-        )
-
-        return embed
-
-    # ---------------- PLAYLIST COMMAND ----------------
+    # ---------------- PLAYLIST ----------------
     @commands.hybrid_command(name="playlist")
     async def playlist(self, ctx, url: str):
 
@@ -67,62 +36,40 @@ class Music(commands.Cog):
         gm = self.get_player(ctx.guild.id)
 
         voice = ctx.voice_client
-
         if not voice:
             voice = await ctx.author.voice.channel.connect(cls=wavelink.Player)
 
         gm.player = voice
 
-        await ctx.send("📥 Converting playlist...")
+        await ctx.send("📥 Processing playlist...")
 
         queries = await self.converter.convert(url)
 
         if not queries:
-            return await ctx.send("❌ Could not extract playlist.")
+            return await ctx.send("❌ No valid tracks found.")
 
         count = 0
 
         for q in queries:
+
+            # 🚨 HARD SAFETY: NEVER allow URLs
+            if "http" in q:
+                continue
+
             try:
-                # music-optimized search
                 results = await wavelink.Playable.search(q)
 
                 if not results:
                     continue
 
-                # ---------------- SMART PICK ----------------
-                track = None
-
-                for r in results[:5]:
-                    title = getattr(r, "title", "").lower()
-
-                    bad_keywords = [
-                        "focus",
-                        "sleep",
-                        "ambient",
-                        "study",
-                        "relax",
-                        "meditation",
-                        "lofi radio"
-                    ]
-
-                    if not any(b in title for b in bad_keywords):
-                        track = r
-                        break
-
-                if not track:
-                    track = results[0]
-
-                await gm.add(track)
+                await gm.add(results[0])
                 count += 1
 
-                await asyncio.sleep(0.2)
-
             except Exception as e:
-                log.error(f"playlist search error: {e}")
+                log.warning(f"playlist item failed: {q} -> {e}")
                 continue
 
-        await ctx.send(f"✅ Added {count} tracks to queue")
+        await ctx.send(f"✅ Added {count} tracks")
 
     # ---------------- PLAY ----------------
     @commands.hybrid_command(name="play")
@@ -137,12 +84,12 @@ class Music(commands.Cog):
         gm = self.get_player(ctx.guild.id)
 
         voice = ctx.voice_client
-
         if not voice:
             voice = await ctx.author.voice.channel.connect(cls=wavelink.Player)
 
         gm.player = voice
 
+        # 🚨 FIX: no ytmsearch prefix
         results = await wavelink.Playable.search(query)
 
         if not results:
@@ -155,7 +102,11 @@ class Music(commands.Cog):
         view = PlayerView(self.bot, ctx.guild.id)
 
         msg = await ctx.send(
-            embed=self.now_playing(track, 0),
+            embed=discord.Embed(
+                title="🎧 Now Playing",
+                description=track.title,
+                color=discord.Color.green()
+            ),
             view=view
         )
 
@@ -164,7 +115,7 @@ class Music(commands.Cog):
 
         asyncio.create_task(self.start_progress_updater(ctx.guild.id))
 
-    # ---------------- UI UPDATER ----------------
+    # ---------------- UI ----------------
     async def start_progress_updater(self, guild_id: int):
         gm = self.get_player(guild_id)
 
@@ -174,14 +125,17 @@ class Music(commands.Cog):
 
                 if gm.message:
                     await gm.message.edit(
-                        embed=self.now_playing(gm.now_playing, pos),
+                        embed=discord.Embed(
+                            title="🎧 Now Playing",
+                            description=getattr(gm.now_playing, "title", "Unknown"),
+                            color=discord.Color.green()
+                        ),
                         view=gm.view
                     )
 
                 await asyncio.sleep(5)
 
-            except Exception as e:
-                log.error(f"UI update error: {e}")
+            except Exception:
                 break
 
 
