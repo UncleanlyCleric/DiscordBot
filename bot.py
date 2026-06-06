@@ -33,11 +33,10 @@ class Bot(commands.Bot):
             intents=intents,
             help_command=None
         )
-
         self.logger = setup_logger()
 
     # =====================================================
-    # STARTUP HOOK
+    # STARTUP
     # =====================================================
     async def setup_hook(self):
         self.logger.info("Starting setup_hook...")
@@ -48,37 +47,18 @@ class Bot(commands.Bot):
         if not LAVALINK_URI or not LAVALINK_PASSWORD:
             raise RuntimeError("Missing Lavalink config")
 
-        # =====================================================
-        # DB INIT
-        # =====================================================
         await init_db()
-        self.logger.info("Database initialized")
 
-        # =====================================================
-        # LAVALINK CONNECTION
-        # =====================================================
-        try:
-            self.logger.info("Connecting to Lavalink...")
+        await wavelink.Pool.connect(
+            nodes=[
+                wavelink.Node(
+                    uri=LAVALINK_URI,
+                    password=LAVALINK_PASSWORD
+                )
+            ],
+            client=self
+        )
 
-            await wavelink.Pool.connect(
-                nodes=[
-                    wavelink.Node(
-                        uri=LAVALINK_URI,
-                        password=LAVALINK_PASSWORD
-                    )
-                ],
-                client=self
-            )
-
-            self.logger.info("Lavalink connected")
-
-        except Exception as e:
-            self.logger.error(f"Lavalink connection failed: {e}")
-            raise
-
-        # =====================================================
-        # LOAD COGS
-        # =====================================================
         extensions = [
             "cogs.quotes",
             "cogs.music",
@@ -95,35 +75,50 @@ class Bot(commands.Bot):
             except Exception as e:
                 self.logger.error(f"Failed {ext}: {e}")
 
-        # =====================================================
-        # SLASH SYNC
-        # =====================================================
-        try:
-            synced = await self.tree.sync()
-            self.logger.info(f"Slash sync complete: {len(synced)} commands")
-        except Exception as e:
-            self.logger.error(f"Slash sync failed: {e}")
+        await self.tree.sync()
+        self.logger.info("Slash sync complete")
 
     # =====================================================
-    # MESSAGE ROUTER (quotes system)
+    # MESSAGE ROUTER (FIXED — NO COMMAND CONFLICTS)
     # =====================================================
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
 
-        if message.guild:
-            quotes = self.get_cog("Quotes")
-            if quotes:
-                await quotes.handle_raw_message(message)
+        if not message.guild:
+            return
 
+        content = message.content.strip()
+
+        # -------------------------------------------------
+        # 1. ALWAYS RUN QUOTES RAW ROUTER FIRST
+        # -------------------------------------------------
+        quotes = self.get_cog("Quotes")
+        if quotes:
+            await quotes.handle_raw_message(message)
+
+        # -------------------------------------------------
+        # 2. BLOCK CUSTOM !<category> FROM ENTERING COMMAND SYSTEM
+        # -------------------------------------------------
+        if content.startswith("!") and len(content) > 1:
+            after = content[1:]
+
+            # if it's !<category> (no space), STOP HERE
+            # prevents discord.py CommandNotFound spam
+            if " " not in after:
+                return
+
+        # -------------------------------------------------
+        # 3. NORMAL PREFIX COMMANDS ONLY
+        # -------------------------------------------------
         await self.process_commands(message)
 
     # =====================================================
-    # FIXED COMMAND ERROR HANDLER (NO DECORATOR!)
+    # SILENTLY IGNORE UNKNOWN COMMANDS
     # =====================================================
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CommandNotFound):
-            return  # silently ignore !test, !yes, etc
+            return
 
         self.logger.error(f"Command error: {error}")
         raise error
