@@ -45,12 +45,12 @@ class Music(commands.Cog):
         )
 
     # =====================================================
-    # PLAY COMMAND (FIXED VOICE HANDLING)
+    # PLAY COMMAND
     # =====================================================
     @commands.hybrid_command(name="play")
     async def play(self, ctx: commands.Context, *, query: str):
 
-        # defer only for slash commands
+        # Slash support
         if ctx.interaction:
             await ctx.interaction.response.defer()
 
@@ -60,20 +60,22 @@ class Music(commands.Cog):
         gm = get_player(ctx.guild.id)
 
         # =====================================================
-        # SAFE VOICE CONNECT (NO FORCE DISCONNECT LOOP)
+        # SAFE VOICE CONNECT
         # =====================================================
         try:
             voice = ctx.voice_client
 
-            if voice is None:
+            if not voice:
                 log.info("[VOICE] connecting...")
                 voice = await ctx.author.voice.channel.connect(cls=wavelink.Player)
                 log.info("[VOICE] connected")
             else:
-                log.info("[VOICE] reusing existing connection")
+                # move if needed instead of reconnecting
+                if voice.channel != ctx.author.voice.channel:
+                    await voice.move_to(ctx.author.voice.channel)
+                log.info("[VOICE] reused existing connection")
 
         except discord.ClientException:
-            # already connected somewhere else
             voice = ctx.voice_client
         except Exception as e:
             log.error(f"[VOICE] connect error: {e}")
@@ -82,15 +84,27 @@ class Music(commands.Cog):
         gm.player = voice
 
         # =====================================================
-        # SEARCH TRACK
+        # SAFE SEARCH (FIXED LAVALINK / YOUTUBE ISSUE)
         # =====================================================
         try:
             log.info(f"[SEARCH] {query}")
 
-            results = await asyncio.wait_for(
-                wavelink.Playable.search(query),
-                timeout=10
-            )
+            results = None
+
+            # FORCE SAFE SOURCES (prevents base.js crash)
+            for q in (f"ytsearch:{query}", f"scsearch:{query}"):
+
+                try:
+                    results = await asyncio.wait_for(
+                        wavelink.Playable.search(q),
+                        timeout=10
+                    )
+
+                    if results:
+                        break
+
+                except Exception as e:
+                    log.warning(f"[SEARCH FAIL] {q}: {e}")
 
         except asyncio.TimeoutError:
             return await ctx.send("❌ Search timed out.")
@@ -113,7 +127,7 @@ class Music(commands.Cog):
         await ctx.send(embed=self.now_playing(track))
 
     # =====================================================
-    # VOICE TEST (NOW SAFE)
+    # VOICE TEST
     # =====================================================
     @commands.command()
     async def voicetest(self, ctx):
@@ -124,6 +138,7 @@ class Music(commands.Cog):
         try:
             vc = await ctx.author.voice.channel.connect()
             await ctx.send("Connected successfully")
+
             await asyncio.sleep(2)
             await vc.disconnect()
 

@@ -4,11 +4,13 @@ services:
   lavalink:
     image: ghcr.io/lavalink-devs/lavalink:4
     container_name: lavalink
-    environment:
-      - SERVER_PORT=8080
-      - LAVALINK_SERVER_PASSWORD=youshallnotpass
+
     ports:
       - "8080:8080"
+
+    volumes:
+      - ./application.yml:/opt/Lavalink/application.yml:ro
+
     restart: unless-stopped
 
   bot:
@@ -27,6 +29,6 @@ services:
       - LAVALINK_URI=http://lavalink:8080
       - LAVALINK_PASSWORD=youshallnotpass
 
-    command: python bot.py   # 🔥 THIS IS THE FIX
+    command: python bot.py
 
     restart: unless-stopped
