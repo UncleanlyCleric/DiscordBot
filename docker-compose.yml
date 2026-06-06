@@ -10,6 +10,7 @@ services:
 
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml:ro
+      - ./plugins:/opt/Lavalink/plugins:ro
 
     environment:
       - _JAVA_OPTIONS=-Xmx1G
