@@ -12,8 +12,6 @@ class MusicManager:
         self.guild_id = guild_id
 
         self.queue = asyncio.Queue()
-        self.history = []
-
         self.now_playing = None
 
         self.player: wavelink.Player | None = None
@@ -24,14 +22,14 @@ class MusicManager:
 
         self.last_active = time.time()
 
+        # autoplay / radio support
         self.radio_enabled = False
         self.radio_seed = None
 
-        # ✅ FIX: navigation control
-        self.skip_lock = False
-
-        # ✅ FIX: volume state
-        self.volume = 100
+        # =========================
+        # 🔥 NEW: playback history
+        # =========================
+        self.history: list = []
 
     # ---------------- STATE ----------------
     def touch(self):
@@ -40,17 +38,18 @@ class MusicManager:
     def is_idle(self):
         return self.now_playing is None and self.queue.empty()
 
-    # ---------------- VOLUME ----------------
-    async def set_volume(self, value: int):
-        self.volume = max(0, min(200, value))
-
+    # ---------------- CONNECT ----------------
+    async def connect(self, channel):
         if self.player:
-            try:
-                await self.player.set_volume(self.volume)
-            except Exception as e:
-                log.warning(f"Volume set failed: {e}")
+            return self.player
 
-    # ---------------- ADD ----------------
+        self.player = await channel.connect(cls=wavelink.Player)
+
+        log.info(f"[Guild {self.guild_id}] Connected to voice channel")
+
+        return self.player
+
+    # ---------------- ADD TRACK ----------------
     async def add(self, track):
         self.touch()
 
@@ -59,19 +58,20 @@ class MusicManager:
 
         await self.queue.put(track)
 
+        log.info(
+            f"[Guild {self.guild_id}] Queued: "
+            f"{getattr(track, 'title', 'Unknown')}"
+        )
+
         if not self.now_playing:
             await self.play_next()
 
     # ---------------- PLAY NEXT ----------------
-    async def play_next(self, from_back=False):
+    async def play_next(self):
         async with self.lock:
 
             if not self.player:
                 return
-
-            # only push history if normal forward flow
-            if self.now_playing and not from_back:
-                self.history.append(self.now_playing)
 
             track = None
 
@@ -80,51 +80,81 @@ class MusicManager:
 
             if not track:
                 self.now_playing = None
+                log.info(f"[Guild {self.guild_id}] Queue empty")
                 return
+
+            # =========================================
+            # 🔥 FIX: push current into history
+            # =========================================
+            if self.now_playing:
+                self.history.append(self.now_playing)
 
             self.now_playing = track
             self.touch()
 
             try:
-                self.skip_lock = True
                 await self.player.play(track)
-                await self.player.set_volume(self.volume)
-            finally:
-                self.skip_lock = False
 
-    # ---------------- BACK ----------------
-    async def play_previous(self):
-        async with self.lock:
+                log.info(
+                    f"[Guild {self.guild_id}] Playing: "
+                    f"{getattr(track, 'title', 'Unknown')}"
+                )
 
-            if not self.history:
-                return None
+            except Exception as e:
+                log.exception(
+                    f"[Guild {self.guild_id}] Failed to play track: {e}"
+                )
 
-            prev = self.history.pop()
+                self.now_playing = None
 
-            # push current back into queue (front behavior approximated)
-            if self.now_playing:
-                await self.queue.put(self.now_playing)
+    # ---------------- BACK (NEW) ----------------
+    async def previous(self):
+        """
+        Play previous track from history safely.
+        """
+        if not self.history:
+            return None
 
-            self.now_playing = prev
+        if not self.player:
+            return None
 
-            try:
-                self.skip_lock = True
-                await self.player.play(prev)
-                await self.player.set_volume(self.volume)
-            finally:
-                self.skip_lock = False
+        prev = self.history.pop()
 
-            return prev
+        # push current back into queue
+        if self.now_playing:
+            await self.queue.put(self.now_playing)
+
+        self.now_playing = prev
+
+        try:
+            await self.player.play(prev)
+            log.info(f"[Guild {self.guild_id}] Playing previous track")
+        except Exception as e:
+            log.exception(f"[Guild {self.guild_id}] Previous failed: {e}")
+            return None
+
+        return prev
 
     # ---------------- STOP ----------------
     async def stop(self):
-        self.history.clear()
-        self.queue = asyncio.Queue()
+
+        self.touch()
         self.now_playing = None
+
+        self.queue = asyncio.Queue()
+        self.radio_seed = None
+
+        # clear history too
+        self.history.clear()
 
         try:
             if self.player:
                 await self.player.stop()
+        except Exception:
+            pass
+
+        try:
+            if self.player:
                 await self.player.disconnect()
         except Exception:
             pass
@@ -137,16 +167,23 @@ class MusicManager:
             except Exception:
                 pass
 
+        log.info(f"[Guild {self.guild_id}] Playback stopped")
+
     # ---------------- SHUFFLE ----------------
     async def shuffle(self):
-        items = []
+
+        tracks = []
 
         while not self.queue.empty():
-            items.append(await self.queue.get())
+            tracks.append(await self.queue.get())
 
-        random.shuffle(items)
+        random.shuffle(tracks)
 
-        for i in items:
-            await self.queue.put(i)
+        for track in tracks:
+            await self.queue.put(track)
 
-        return len(items)
+        log.info(
+            f"[Guild {self.guild_id}] Shuffled {len(tracks)} tracks"
+        )
+
+        return len(tracks)
