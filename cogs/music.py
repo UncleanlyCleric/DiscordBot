@@ -149,8 +149,8 @@ class Music(commands.Cog):
         view = PlayerView(self.bot, ctx.guild.id)
 
         msg = await ctx.send(
-            embed=self.now_playing(gm.now_playing, 0)
-            if gm.now_playing
+            embed=self.now_playing(gm.current, 0)
+            if gm.current
             else discord.Embed(
                 title="🎧 Player Ready",
                 description="Queue started",
@@ -236,7 +236,7 @@ class Music(commands.Cog):
 
         gm = self.get_player(player.guild.id)
 
-        gm.now_playing = None
+        gm.current = None
         await gm.play_next()
 
     # =====================================================

@@ -142,8 +142,14 @@ class Bot(commands.Bot):
 
     async def on_command_error(self, ctx, error):
 
+        # ✅ FIX: silently ignore unknown commands like !yes, !us, etc.
         if isinstance(error, commands.CommandNotFound):
             return
+
+        # Optional: ignore hybrid/app wrapper noise
+        if isinstance(error, commands.HybridCommandError):
+            return
+
         print(f"[COMMAND ERROR] {error}")
 
         traceback.print_exception(
@@ -151,8 +157,9 @@ class Bot(commands.Bot):
             error,
             error.__traceback__
         )
-        
-        raise error
+
+        # ❌ IMPORTANT FIX: do NOT re-raise CommandNotFound or hybrids
+        return
 
 
 # =====================================================
