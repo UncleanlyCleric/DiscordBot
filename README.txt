@@ -1,101 +1,314 @@
-Docker Setup:
+# DiscordBot
 
-apt update && apt upgrade -y
+A self-hosted Discord bot built with Discord.py, Wavelink, and Lavalink.
 
-apt install -y ca-certificates curl gnupg
+## Features
 
-install -m 0755 -d /etc/apt/keyrings
+### Music
 
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+* YouTube Music search and playback
+* Playlist support
+* Queue management
+* Interactive player controls
+* Previous track support
+* Shuffle, loop, skip, stop
+* Lavalink-powered audio streaming
 
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
-  > /etc/apt/sources.list.d/docker.list
+### Quotes
 
-apt update
+* Save quotes to a SQLite database
+* Category-based quote retrieval
+* Random quote responses
+* Raw message trigger support
 
-apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+### Utility Commands
 
+* Dice rolling
+* Help commands
+* Server configuration
 
+### Markov Brain (Optional)
 
-Upload:
+* Learns from server messages
+* Generates Markov-chain text
+* Per-server training
+* Channel locking support
+* Persistent memory storage
 
-mkdir athene-bot
+---
 
-cd athene-bot
+# Requirements
 
+* Python 3.11+
+* Java 17+ (for Lavalink)
+* Docker and Docker Compose (recommended)
 
-Project Structure:
+---
 
-athene-bot/
- ├── bot.py
- ├── cogs/
- ├── utils/
- ├── requirements.txt
- ├── Dockerfile
- ├── docker-compose.yml
- └── .env
+# Installation
 
+## Clone Repository
 
+```bash
+git clone https://github.com/UncleanlyCleric/DiscordBot.git
+cd DiscordBot
+```
 
- env:
+---
 
- DISCORD_TOKEN=your_discord_bot_token
+## Create Environment
 
+```bash
+python -m venv venv
+source venv/bin/activate
+```
 
+Windows:
 
- docker-compose.yaml:
+```powershell
+venv\Scripts\activate
+```
 
- version: "3.9"
+---
 
-services:
+## Install Dependencies
 
-  lavalink:
-   version: "3.9"
+```bash
+pip install -r requirements.txt
+```
 
-services:
+---
 
-  lavalink:
-    image: fredboat/lavalink:latest
-    container_name: lavalink
-    environment:
-      - LAVALINK_SERVER_PASSWORD=youshallnotpass
-    ports:
-      - "2333:2333"
+# Discord Bot Setup
 
-    restart: unless-stopped
+## Create Bot Application
 
-  bot:
-    build: .
-    container_name: discord-bot
-    depends_on:
-      - lavalink
+1. Open Discord Developer Portal
+2. Create New Application
+3. Create Bot
+4. Copy Bot Token
 
-    environment:
-      - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - LAVALINK_URI=http://lavalink:2333
-      - LAVALINK_PASSWORD=youshallnotpass
+Enable:
 
-    
-  bot:
-    build: .
-    container_name: discord-bot
-    depends_on:
-      - lavalink
+* Message Content Intent
+* Server Members Intent (optional)
+* Presence Intent (optional)
 
-    environment:
-      - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - LAVALINK_URI=http://lavalink:2333
-      - LAVALINK_PASSWORD=youshallnotpass
+---
 
-    restart: unless-stopped
+## Invite Bot
 
+Use the generated OAuth URL with:
 
+* bot
+* applications.commands
 
-Start up:
+permissions.
 
+---
+
+# Environment Variables
+
+Create a `.env` file:
+
+```env
+DISCORD_TOKEN=YOUR_TOKEN_HERE
+
+LAVALINK_URI=http://lavalink:2333
+LAVALINK_PASSWORD=youshallnotpass
+```
+
+---
+
+# Lavalink Setup
+
+The repository includes:
+
+```text
+lavalink/
+├── application.yaml
+└── Lavalink.jar
+
+plugins/
+├── lavasrc.jar
+└── youtube.jar
+```
+
+These provide:
+
+* YouTube support
+* YouTube Music support
+* Additional source resolution
+
+---
+
+## Docker Start
+
+```bash
+docker compose up -d
+```
+
+View logs:
+
+```bash
+docker compose logs -f
+```
+
+Rebuild:
+
+```bash
 docker compose up --build -d
+```
 
+Stop:
 
-markov setup, in discord run /set_markov_channel with channel id of channel.
+```bash
+docker compose down
+```
+
+---
+
+# Running Without Docker
+
+Start Lavalink:
+
+```bash
+java -jar lavalink/Lavalink.jar
+```
+
+Start bot:
+
+```bash
+python bot.py
+```
+
+---
+
+# Commands
+
+## Music
+
+```text
+/play <song>
+/playlist <url>
+/skip
+/stop
+/pause
+/resume
+/queue
+```
+
+---
+
+## Quotes
+
+Examples:
+
+```text
+!yes
+!no
+```
+
+Retrieve random quotes from configured categories.
+
+---
+
+## Configuration
+
+View current settings:
+
+```text
+/config
+```
+
+Set DJ role:
+
+```text
+/ set_dj_role
+```
+
+Set Markov channel:
+
+```text
+/ set_markov_channel
+```
+
+Enable/disable Markov learning:
+
+```text
+/ toggle_markov_training
+```
+
+---
+
+# Data Storage
+
+## SQLite
+
+Quote data:
+
+```text
+data/quotes.db
+```
+
+## Markov
+
+Per-guild brain files:
+
+```text
+data/markov_<guild_id>.json.gz
+```
+
+---
+
+# Project Structure
+
+```text
+DiscordBot/
+├── bot.py
+├── cogs/
+│   ├── admin.py
+│   ├── config.py
+│   ├── dice.py
+│   ├── help.py
+│   ├── logger.py
+│   ├── markov.py
+│   ├── music.py
+│   └── quotes.py
+│
+├── music/
+│   ├── guild_music.py
+│   ├── manager.py
+│   ├── playlist_converter.py
+│   └── utils.py
+│
+├── ui/
+│   └── player.py
+│
+├── utils/
+│   ├── config.py
+│   ├── db.py
+│   ├── logger.py
+│   ├── quotes_store.py
+│   └── resolver.py
+│
+├── data/
+├── lavalink/
+├── plugins/
+└── docker-compose.yml
+```
+
+---
+
+# Notes
+
+* Lavalink must be running before music playback will function.
+* Markov functionality is optional and can be disabled entirely.
+* Music playback uses Wavelink and Lavalink rather than Discord voice clients directly.
+* Data is persisted locally and survives restarts.
+
+---
+
+# License
+
+Personal project. Modify and use as desired.

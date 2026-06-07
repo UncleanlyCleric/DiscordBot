@@ -6,82 +6,228 @@ from discord.ext import commands
 # COMMAND HELP DATA
 # =====================================================
 COMMAND_HELP = {
-    "roll": {
-        "title": "🎲 /roll",
-        "description": "Roll dice using tabletop notation.",
-        "usage": [
-            "/roll d20",
-            "/roll d20+5",
-            "/roll d20a",
-            "/roll d20d",
-            "/roll 4d6kh3",
-            "/roll 8d6kl4+2"
-        ],
-        "examples": [
-            "d20 → Roll a d20",
-            "d20+5 → Roll a d20 and add 5",
-            "d20a → Advantage",
-            "d20d → Disadvantage",
-            "4d6kh3 → Keep highest 3",
-            "4d6kl3 → Keep lowest 3"
-        ]
-    },
+"roll": {
+"title": "🎲 /roll",
+"description": "Roll dice using tabletop notation.",
+"usage": [
+"/roll d20",
+"/roll d20+5",
+"/roll d20a",
+"/roll d20d",
+"/roll 4d6kh3",
+"/roll 8d6kl4+2"
+],
+"examples": [
+"d20 → Roll a d20",
+"d20+5 → Roll and add a modifier",
+"d20a → Advantage",
+"d20d → Disadvantage",
+"4d6kh3 → Keep highest 3",
+"4d6kl3 → Keep lowest 3"
+]
+},
 
-    "play": {
-        "title": "🎵 /play",
-        "description": "Search for and play music.",
-        "usage": [
-            "/play bohemian rhapsody",
-            "/play never gonna give you up",
-            "/play https://youtube.com/...",
-            "/play https://open.spotify.com/..."
-        ],
-        "examples": [
-            "Play by song name",
-            "Play a YouTube URL",
-            "Play a Spotify URL"
-        ]
-    },
+```
+"play": {
+    "title": "🎵 /play",
+    "description": "Search for and play music immediately.",
+    "usage": [
+        "/play song name",
+        "/play artist - song",
+        "/play youtube url",
+        "/play spotify url"
+    ],
+    "examples": [
+        "/play The Cure - Just Like Heaven",
+        "/play https://youtube.com/...",
+        "/play https://open.spotify.com/..."
+    ]
+},
 
-    "playlist": {
-        "title": "📃 /playlist",
-        "description": "Load an entire playlist into the queue.",
-        "usage": [
-            "/playlist <url>",
-            "/playlist <url> true"
-        ],
-        "examples": [
-            "Load playlist normally",
-            "Load playlist shuffled"
-        ]
-    },
+"playlist": {
+    "title": "📃 /playlist",
+    "description": "Load a playlist into the queue.",
+    "usage": [
+        "/playlist <url>",
+        "/playlist <url> true"
+    ],
+    "examples": [
+        "Load playlist normally",
+        "Load playlist shuffled"
+    ]
+},
 
-    "shuffle": {
-        "title": "🔀 /shuffle",
-        "description": "Shuffle the current queue.",
-        "usage": [
-            "/shuffle"
-        ],
-        "examples": [
-            "Randomize queued tracks"
-        ]
-    },
+"queue": {
+    "title": "📜 /queue",
+    "description": "View the current music queue.",
+    "usage": [
+        "/queue"
+    ],
+    "examples": [
+        "Displays queued tracks"
+    ]
+},
 
-    "quote": {
-        "title": "💬 Quote System",
-        "description": "Manage and retrieve quotes.",
-        "usage": [
-            "/quote add <category> <text>",
-            "/quote get <category>",
-            "/quote search <query>"
-        ],
-        "examples": [
-            "/quote add movie May the Force be with you",
-            "/quote get movie",
-            "/quote search force"
-        ]
-    }
+"skip": {
+    "title": "⏭ /skip",
+    "description": "Skip the currently playing track.",
+    "usage": [
+        "/skip"
+    ],
+    "examples": [
+        "Move to the next song"
+    ]
+},
+
+"pause": {
+    "title": "⏸ /pause",
+    "description": "Pause playback.",
+    "usage": [
+        "/pause"
+    ],
+    "examples": [
+        "Pause current track"
+    ]
+},
+
+"resume": {
+    "title": "▶️ /resume",
+    "description": "Resume playback.",
+    "usage": [
+        "/resume"
+    ],
+    "examples": [
+        "Continue current track"
+    ]
+},
+
+"stop": {
+    "title": "⏹ /stop",
+    "description": "Stop playback and clear the queue.",
+    "usage": [
+        "/stop"
+    ],
+    "examples": [
+        "Disconnect and clear music"
+    ]
+},
+
+"shuffle": {
+    "title": "🔀 /shuffle",
+    "description": "Shuffle the current queue.",
+    "usage": [
+        "/shuffle"
+    ],
+    "examples": [
+        "Randomize queued tracks"
+    ]
+},
+
+"quote": {
+    "title": "💬 Quotes",
+    "description": "Store and retrieve quotes.",
+    "usage": [
+        "/quote add <category> <text>",
+        "/quote get <category>",
+        "/quote search <text>"
+    ],
+    "examples": [
+        "/quote add movie May the Force be with you",
+        "/quote get movie",
+        "/quote search force"
+    ]
+},
+
+"yes": {
+    "title": "👍 Quote Trigger",
+    "description": "Retrieve a random quote from the 'yes' category.",
+    "usage": [
+        "!yes"
+    ],
+    "examples": [
+        "!yes"
+    ]
+},
+
+"no": {
+    "title": "👎 Quote Trigger",
+    "description": "Retrieve a random quote from the 'no' category.",
+    "usage": [
+        "!no"
+    ],
+    "examples": [
+        "!no"
+    ]
+},
+
+"config": {
+    "title": "⚙️ /config",
+    "description": "View current server configuration.",
+    "usage": [
+        "/config"
+    ],
+    "examples": [
+        "Displays configured settings"
+    ]
+},
+
+"set_dj_role": {
+    "title": "🎧 /set_dj_role",
+    "description": "Set the DJ role used for music permissions.",
+    "usage": [
+        "/set_dj_role @Role"
+    ],
+    "examples": [
+        "/set_dj_role DJ"
+    ]
+},
+
+"set_markov_channel": {
+    "title": "🧠 /set_markov_channel",
+    "description": "Restrict Markov learning to one channel.",
+    "usage": [
+        "/set_markov_channel #channel"
+    ],
+    "examples": [
+        "/set_markov_channel #just-some-bullshit"
+    ]
+},
+
+"toggle_markov_training": {
+    "title": "🧠 /toggle_markov_training",
+    "description": "Enable or disable Markov learning.",
+    "usage": [
+        "/toggle_markov_training"
+    ],
+    "examples": [
+        "Turns Markov training on or off"
+    ]
+},
+
+"markov": {
+    "title": "🧠 !markov",
+    "description": "Generate text from the Markov brain.",
+    "usage": [
+        "!markov"
+    ],
+    "examples": [
+        "Generate a random Markov sentence"
+    ]
+},
+
+"brain": {
+    "title": "🧠 !brain",
+    "description": "View Markov personality traits.",
+    "usage": [
+        "!brain"
+    ],
+    "examples": [
+        "Display chaos/coherence/talkativeness"
+    ]
 }
+
+
+
 
 
 # =====================================================
@@ -349,14 +495,15 @@ class Help(commands.Cog):
         # =============================================
         embed = discord.Embed(
             title="📖 Help Menu",
-            description=(
+        description=(
                 "Select a category below.\n\n"
-                "**Detailed Help:**\n"
-                "`/help roll`\n"
+                "**Popular Help Topics**\n"
                 "`/help play`\n"
                 "`/help playlist`\n"
-                "`/help shuffle`\n"
-                "`/help quote`"
+                "`/help queue`\n"
+                "`/help quote`\n"
+                "`/help config`\n"
+                "`/help roll`\n"
             ),
             color=discord.Color.blurple()
         )
