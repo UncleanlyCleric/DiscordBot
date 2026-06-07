@@ -230,6 +230,35 @@ class Help(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    # -------------------------------------------------
+    # SAFE RESPONSE HANDLER (IMPORTANT FIX)
+    # -------------------------------------------------
+    async def safe_reply(self, ctx, content=None, *, embed=None, view=None):
+        try:
+            if ctx.interaction:
+                if not ctx.interaction.response.is_done():
+                    await ctx.interaction.response.send_message(
+                        content=content,
+                        embed=embed,
+                        view=view,
+                        ephemeral=True if content else False
+                    )
+                else:
+                    await ctx.followup.send(
+                        content=content,
+                        embed=embed,
+                        view=view,
+                        ephemeral=True if content else False
+                    )
+            else:
+                await ctx.send(content=content, embed=embed, view=view)
+
+        except Exception as e:
+            print("[HELP SAFE REPLY ERROR]", e)
+
+    # =================================================
+    # COMMAND
+    # =================================================
     @commands.hybrid_command(name="help", description="Show help information")
     async def help(self, ctx: commands.Context, query: str = None):
 
@@ -266,23 +295,15 @@ class Help(commands.Cog):
 
                 try:
                     await ctx.author.send(embed=embed)
-
-                    if ctx.interaction:
-                        await ctx.send(
-                            "📬 Check your DMs for help information.",
-                            ephemeral=True
-                        )
-                    else:
-                        await ctx.send("📬 Check your DMs for help information.")
-
                 except discord.Forbidden:
-                    await ctx.send(
-                        "❌ I couldn't DM you. Enable DMs and try again."
-                    )
+                    await self.safe_reply(ctx, "❌ I couldn't DM you. Enable DMs and try again.")
+                    return
 
+                await self.safe_reply(ctx, "📬 Check your DMs for help information.")
                 return
 
-            await ctx.send(
+            await self.safe_reply(
+                ctx,
                 embed=discord.Embed(
                     title="❌ Command Not Found",
                     description=f"No help available for `{query}`",
@@ -313,19 +334,11 @@ class Help(commands.Cog):
 
         try:
             await ctx.author.send(embed=embed, view=view)
-
-            if ctx.interaction:
-                await ctx.send(
-                    "📬 Check your DMs for the help menu.",
-                    ephemeral=True
-                )
-            else:
-                await ctx.send("📬 Check your DMs for the help menu.")
-
         except discord.Forbidden:
-            await ctx.send(
-                "❌ I couldn't DM you. Enable DMs and try again."
-            )
+            await self.safe_reply(ctx, "❌ I couldn't DM you. Enable DMs and try again.")
+            return
+
+        await self.safe_reply(ctx, "📬 Check your DMs for the help menu.")
 
 # =====================================================
 # SETUP
