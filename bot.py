@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import wavelink
 import traceback
 import logging
+from discord import app_commands
 
 from utils.logger import setup_logger
 from utils.db import init as init_db
@@ -44,18 +45,15 @@ class Bot(commands.Bot):
     async def setup_hook(self):
         print("\n[BOOT] setup_hook started")
 
-        # ---------------- TOKEN CHECK ----------------
         if not TOKEN:
             raise RuntimeError("Missing DISCORD_TOKEN")
 
         if not LAVALINK_URI or not LAVALINK_PASSWORD:
             raise RuntimeError("Missing Lavalink config")
 
-        # ---------------- DB ----------------
         print("[BOOT] init db...")
         await init_db()
 
-        # ---------------- LAVALINK ----------------
         print("[BOOT] connecting wavelink...")
 
         try:
@@ -73,7 +71,6 @@ class Bot(commands.Bot):
             print("[BOOT] WAVELINK FAILED:", e)
             traceback.print_exc()
 
-        # ---------------- COGS ----------------
         extensions = [
             "cogs.quotes",
             "cogs.music",
@@ -93,12 +90,11 @@ class Bot(commands.Bot):
                 print(f"[BOOT] FAILED COG: {ext}")
                 traceback.print_exc()
 
-        # ---------------- SLASH SYNC ----------------
         print("[BOOT] syncing slash commands...")
         print("[BOOT] Registered app commands:")
 
         for cmd in self.tree.get_commands():
-             print(f" - {cmd.name}")
+            print(f" - {cmd.name}")
 
         try:
             synced = await self.tree.sync()
@@ -119,19 +115,16 @@ class Bot(commands.Bot):
 
         print(f"[MESSAGE] {message.author}: {message.content}")
 
-        # IMPORTANT: do not block commands
         try:
             await self.process_commands(message)
 
-        except Exception as e:
-            # FIX: suppress CommandNotFound spam safely
-            if "CommandNotFound" in str(e):
-                pass
-            else:
-                print("[COMMAND ERROR]", e)
-                traceback.print_exc()
+        except commands.CommandNotFound:
+            pass
 
-        # optional raw system debug
+        except Exception as e:
+            print("[COMMAND ERROR]", e)
+            traceback.print_exc()
+
         try:
             quotes = self.get_cog("Quotes")
             if quotes:
@@ -142,14 +135,13 @@ class Bot(commands.Bot):
             traceback.print_exc()
 
     # =====================================================
-    # COMMAND DEBUG
+    # PREFIX COMMAND DEBUG
     # =====================================================
     async def on_command(self, ctx):
         print(f"[COMMAND] {ctx.command} by {ctx.author}")
 
     async def on_command_error(self, ctx, error):
 
-        #  ignore unknown commands completely
         if isinstance(error, commands.CommandNotFound):
             return
 
@@ -159,10 +151,20 @@ class Bot(commands.Bot):
         if "CommandNotFound" in str(error):
             return
 
-        #  FIX: ctx.command can be None
         command_name = getattr(ctx.command, "name", None) or "unknown"
 
         self.logger.error(f"ERROR in {command_name}: {error}")
+
+    # =====================================================
+    # SLASH / HYBRID ERROR HANDLER (MISSING PIECE)
+    # =====================================================
+    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+
+        if "CommandNotFound" in str(error):
+            return
+
+        self.logger.error(f"APP ERROR: {error}")
+
 
 # =====================================================
 # RUN BOT
