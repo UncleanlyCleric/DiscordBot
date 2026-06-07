@@ -21,7 +21,7 @@ class Quotes(commands.Cog):
             self.bot.logger.error(f"SAFE_SEND ERROR: {e}")
 
     # =====================================================
-    # RAW MESSAGE ROUTER
+    # RAW MESSAGE HANDLER
     # =====================================================
     async def handle_raw_message(self, message: discord.Message):
         if not message.guild or message.author.bot:
@@ -32,55 +32,55 @@ class Quotes(commands.Cog):
         print(f"[QUOTES DEBUG] raw: {content}")
 
         # =================================================
-        # 🚨 Ignore real bot commands to prevent conflicts
+        # IGNORE REAL COMMANDS (FIXED SAFETY FILTER)
         # =================================================
         if content.startswith("!"):
             cmd = content[1:].split(" ", 1)[0].lower()
 
+            # Let real bot commands pass through normally
             if cmd in ["help", "play", "skip", "stop", "quote", "searchquote", "delquote", "editquote"]:
                 return
 
-        # =================================================
-        # ➕ !add<category> <text>
-        # =================================================
-        if content.startswith("!add"):
-            try:
-                raw = content[4:].strip()
+            # =================================================
+            # ➕ !add<category> <text>
+            # =================================================
+            if cmd.startswith("add"):
+                try:
+                    raw = content[4:].strip()
 
-                if not raw:
-                    await self.safe_send(message.channel, "Usage: `!add<category> <text>`")
-                    return
+                    if not raw:
+                        await self.safe_send(message.channel, "Usage: `!add<category> <text>`")
+                        return
 
-                parts = raw.split(" ", 1)
+                    parts = raw.split(" ", 1)
+                    if len(parts) != 2:
+                        await self.safe_send(message.channel, "Usage: `!add<category> <text>`")
+                        return
 
-                if len(parts) != 2:
-                    await self.safe_send(message.channel, "Usage: `!add<category> <text>`")
-                    return
+                    category, text = parts
+                    category = category.lower().strip()
 
-                category, text = parts
-                category = category.lower().strip()
+                    print(f"[QUOTES DEBUG] add -> category={category}, text={text}")
 
-                print(f"[QUOTES DEBUG] add -> category={category}, text={text}")
+                    await add(
+                        guild_id=message.guild.id,
+                        category=category,
+                        content=text,
+                        author_id=str(message.author.id)
+                    )
 
-                await add(
-                    guild_id=message.guild.id,
-                    category=category,
-                    content=text,
-                    author_id=str(message.author.id)
-                )
+                    await self.safe_send(message.channel, f"✅ Added to `{category}`")
 
-                await self.safe_send(message.channel, f"✅ Added to `{category}`")
+                except Exception as e:
+                    self.bot.logger.error(f"ADD QUOTE ERROR: {e}")
+                    await self.safe_send(message.channel, "❌ Failed to add quote.")
 
-            except Exception as e:
-                self.bot.logger.error(f"ADD QUOTE ERROR: {e}")
-                await self.safe_send(message.channel, "❌ Failed to add quote.")
-            return
+                return
 
-        # =================================================
-        # 💬 !<category>
-        # =================================================
-        if content.startswith("!") and len(content) > 1:
-            category = content[1:].split(" ", 1)[0].lower().strip()
+            # =================================================
+            # 💬 !<category> (QUOTE FETCH)
+            # =================================================
+            category = cmd.lower().strip()
 
             print(f"[QUOTES DEBUG] fetch category={category}")
 
@@ -92,6 +92,8 @@ class Quotes(commands.Cog):
 
             except Exception as e:
                 self.bot.logger.error(f"DB FETCH ERROR: {e}")
+
+            return
 
     # =====================================================
     # PREFIX COMMANDS
