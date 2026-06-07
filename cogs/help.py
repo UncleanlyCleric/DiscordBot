@@ -27,7 +27,6 @@ COMMAND_HELP = {
 ]
 },
 
-```
 "play": {
     "title": "🎵 /play",
     "description": "Search for and play music immediately.",
