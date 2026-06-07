@@ -502,24 +502,44 @@ class Help(commands.Cog):
                     inline=False
                 )
 
-                return await ctx.send(
-                    embed=embed
-                )
+                try:
+                    dm = await ctx.author.create_dm()
 
-            return await ctx.send(
+                    await dm.send(embed=embed)
+
+                    if ctx.interaction:
+                        await ctx.send(
+                            "📬 Check your DMs for help information.",
+                            ephemeral=True
+                        )
+                    else:
+                        await ctx.send(
+                            "📬 Check your DMs for help information."
+                        )
+
+                except discord.Forbidden:
+
+                    await ctx.send(
+                        "❌ I couldn't DM you. Enable DMs and try again."
+                    )
+
+                return
+
+            await ctx.send(
                 embed=discord.Embed(
                     title="❌ Command Not Found",
                     description=f"No help available for `{query}`",
                     color=discord.Color.red()
                 )
             )
+            return
 
         # =============================================
         # MAIN HELP MENU
         # =============================================
         embed = discord.Embed(
             title="📖 Help Menu",
-        description=(
+            description=(
                 "Select a category below.\n\n"
                 "**Popular Help Topics**\n"
                 "`/help play`\n"
@@ -534,10 +554,29 @@ class Help(commands.Cog):
 
         view = HelpView(help_data)
 
-        await ctx.send(
-            embed=embed,
-            view=view
-        )
+        try:
+            dm = await ctx.author.create_dm()
+
+            await dm.send(
+                embed=embed,
+                view=view
+            )
+
+            if ctx.interaction:
+                await ctx.send(
+                    "📬 Check your DMs for the help menu.",
+                    ephemeral=True
+                )
+            else:
+                await ctx.send(
+                    "📬 Check your DMs for the help menu."
+                )
+
+        except discord.Forbidden:
+
+            await ctx.send(
+                "❌ I couldn't DM you. Enable DMs and try again."
+            )
 
 
 # =====================================================
