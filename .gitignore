@@ -85,3 +85,10 @@ dist/
 # Environment variables
 .env
 
+bin/
+include/
+lib/
+
+discordbot/bin/
+discordbot/include/
+discordbot/lib/
