@@ -18,6 +18,11 @@ class CoreLogging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
+
+        # ✅ FIX: ignore unknown commands (THIS IS THE BUG)
+        if "CommandNotFound" in str(error):
+            return
+
         self.bot.logger.error(
             f"ERROR in {ctx.command}: {error}"
         )
