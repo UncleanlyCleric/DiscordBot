@@ -24,7 +24,7 @@ class Music(commands.Cog):
             self.players[guild_id] = MusicManager(guild_id)
         return self.players[guild_id]
 
-    # ---------------- SHUFFLE COMMAND ----------------
+    # ---------------- SHUFFLE ----------------
     @commands.hybrid_command(name="shuffle")
     async def shuffle(self, ctx):
         gm = self.get_player(ctx.guild.id)
@@ -42,7 +42,6 @@ class Music(commands.Cog):
         pos_sec = int(position / 1000)
         dur_sec = int(duration / 1000) if duration else 0
 
-        # ---------------- progress bar ----------------
         def make_bar(current, total, length=12):
             if total <= 0:
                 return "▱" * length
@@ -90,7 +89,7 @@ class Music(commands.Cog):
                 inline=False
             )
 
-        # ---------------- footer (volume / radio) ----------------
+        # footer info
         footer = []
 
         gm = self.get_player(track.guild.id) if hasattr(track, "guild") else None
@@ -132,23 +131,18 @@ class Music(commands.Cog):
         count = 0
 
         for q in queries:
-            if not isinstance(q, str):
-                continue
-
             try:
                 results = await wavelink.Playable.search(q)
 
                 if not results:
                     continue
 
-                # playlist support
                 if hasattr(results, "tracks"):
                     for track in results.tracks:
                         await gm.add(track)
                         count += 1
                 else:
-                    track = results[0]
-                    await gm.add(track)
+                    await gm.add(results[0])
                     count += 1
 
             except Exception as e:
@@ -174,7 +168,7 @@ class Music(commands.Cog):
 
         asyncio.create_task(self.start_progress_updater(ctx.guild.id))
 
-    # ---------------- PLAYLIST ----------------
+    # ---------------- PLAYLIST (FIXED UI) ----------------
     @commands.hybrid_command(name="playlist")
     async def playlist(self, ctx, url: str, shuffle: bool = False):
 
@@ -224,11 +218,32 @@ class Music(commands.Cog):
 
         await ctx.send(f"✅ Added {len(tracks_to_add)} tracks")
 
+        # =====================================================
+        # 🔥 RESTORE UI (FIX)
+        # =====================================================
+        view = PlayerView(self.bot, ctx.guild.id)
+
+        msg = await ctx.send(
+            embed=self.now_playing(gm.now_playing, 0)
+            if gm.now_playing
+            else discord.Embed(
+                title="🎧 Player Ready",
+                description="Playlist loaded",
+                color=discord.Color.green()
+            ),
+            view=view
+        )
+
+        gm.message = msg
+        gm.view = view
+
+        asyncio.create_task(self.start_progress_updater(ctx.guild.id))
+
     # ---------------- TRACK END ----------------
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, payload):
-        player = payload.player
 
+        player = payload.player
         if not player:
             return
 
@@ -242,6 +257,7 @@ class Music(commands.Cog):
 
     # ---------------- UI UPDATER ----------------
     async def start_progress_updater(self, guild_id: int):
+
         gm = self.get_player(guild_id)
 
         while gm and gm.player and gm.now_playing:
