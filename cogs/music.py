@@ -243,16 +243,15 @@ class Music(commands.Cog):
     # PROGRESS UPDATER
     # =====================================================
     async def start_progress_updater(self, guild_id: int):
-
         gm = self.get_player(guild_id)
 
-        while gm and gm.player and gm.now_playing:
+        while gm and gm.player and gm.current:
             try:
                 pos = gm.player.position if gm.player else 0
 
                 if gm.message:
                     await gm.message.edit(
-                        embed=self.now_playing(gm.now_playing, pos),
+                        embed=self.now_playing(gm.current, pos),
                         view=gm.view
                     )
 

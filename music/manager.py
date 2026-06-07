@@ -12,14 +12,24 @@ class MusicManager:
         self.guild_id = guild_id
 
         # =========================
-        # CORE STATE
+        # CORE STATE (SINGLE SOURCE OF TRUTH)
         # =========================
         self.queue: asyncio.Queue[wavelink.Playable] = asyncio.Queue()
         self.history: list[wavelink.Playable] = []
         self.current: wavelink.Playable | None = None
 
+        # =========================
+        # PLAYER
+        # =========================
         self.player: wavelink.Player | None = None
         self.lock = asyncio.Lock()
+
+        # =========================
+        # SETTINGS
+        # =========================
+        self.volume = 100
+        self.radio_enabled = False
+        self.radio_seed = None
 
         # =========================
         # UI STATE
@@ -27,13 +37,7 @@ class MusicManager:
         self.message = None
         self.view = None
 
-        # =========================
-        # META
-        # =========================
         self.last_active = time.time()
-
-        self.radio_enabled = False
-        self.radio_seed = None
 
     # =====================================================
     # STATE HELPERS
@@ -45,17 +49,26 @@ class MusicManager:
         return self.current is None and self.queue.empty()
 
     # =====================================================
-    # SAFE QUEUE SNAPSHOT (NEW FOR UI PANEL V2)
+    # VOLUME CONTROL (FIXED)
+    # =====================================================
+    async def set_volume(self, value: int):
+        self.volume = max(0, min(100, value))
+
+        if self.player:
+            await self.player.set_volume(self.volume)
+
+    async def volume_up(self):
+        await self.set_volume(self.volume + 10)
+
+    async def volume_down(self):
+        await self.set_volume(self.volume - 10)
+
+    # =====================================================
+    # SAFE QUEUE VIEW
     # =====================================================
     def get_queue_snapshot(self, limit: int = 10):
-        """
-        Returns a safe preview of upcoming queue items
-        without modifying or consuming the queue.
-        """
-
         try:
-            items = list(self.queue._queue)  # internal deque
-            return items[:limit]
+            return list(self.queue._queue)[:limit]
         except Exception:
             return []
 
@@ -67,13 +80,15 @@ class MusicManager:
             return self.player
 
         self.player = await channel.connect(cls=wavelink.Player)
+        await self.player.set_volume(self.volume)
+
         log.info(f"[Guild {self.guild_id}] connected")
         return self.player
 
     # =====================================================
     # ADD TRACK
     # =====================================================
-    async def add(self, track: wavelink.Playable):
+    async def add(self, track):
         self.touch()
 
         if not self.radio_seed:
@@ -85,7 +100,7 @@ class MusicManager:
             await self.play_next()
 
     # =====================================================
-    # PLAY NEXT
+    # PLAY NEXT (FIXED STATE FLOW)
     # =====================================================
     async def play_next(self):
         async with self.lock:
@@ -110,6 +125,7 @@ class MusicManager:
                 self.current = None
                 return
 
+            # push history BEFORE replacing current
             if self.current:
                 self.history.append(self.current)
 
@@ -118,12 +134,13 @@ class MusicManager:
 
             try:
                 await self.player.play(next_track)
+                await self.player.set_volume(self.volume)
             except Exception as e:
                 log.exception(f"play failed: {e}")
                 self.current = None
 
     # =====================================================
-    # PREVIOUS TRACK
+    # PREVIOUS TRACK (FIXED)
     # =====================================================
     async def previous(self):
         async with self.lock:
@@ -140,8 +157,8 @@ class MusicManager:
 
             try:
                 await self.player.play(prev)
-            except Exception as e:
-                log.exception(f"previous failed: {e}")
+                await self.player.set_volume(self.volume)
+            except Exception:
                 return None
 
             return prev
@@ -154,11 +171,9 @@ class MusicManager:
             await self.player.stop()
 
     # =====================================================
-    # STOP
+    # STOP (FULL RESET)
     # =====================================================
     async def stop(self):
-        self.touch()
-
         self.current = None
         self.history.clear()
         self.queue = asyncio.Queue()
