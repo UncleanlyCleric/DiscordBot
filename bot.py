@@ -149,23 +149,21 @@ class Bot(commands.Bot):
 
     async def on_command_error(self, ctx, error):
 
-        # FIX: fully suppress command-not-found variants
+        # 🚫 fully suppress all unknown command noise
+        if isinstance(error, commands.CommandNotFound):
+            return
+
+        # 🚫 suppress hybrid wrapper noise
+        if isinstance(error, commands.HybridCommandError):
+            return
+
+        # 🚫 suppress string-wrapped cases (discord inconsistency)
         if "CommandNotFound" in str(error):
             return
 
-        # ignore hybrid noise
-        if "HybridCommandError" in str(error):
+        # only log real errors
+            self.logger.error(f"ERROR in {ctx.command}: {error}")
             return
-
-        print(f"[COMMAND ERROR] {error}")
-
-        traceback.print_exception(
-            type(error),
-            error,
-            error.__traceback__
-        )
-
-        return
 
 
 # =====================================================
