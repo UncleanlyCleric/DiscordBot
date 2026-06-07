@@ -2,12 +2,19 @@ import discord
 from discord.ext import commands
 import wavelink
 import tempfile
+import sys
+import os
+
+# =====================================================
+# SAFE IMPORT (DOCKER / PATH SAFE)
+# =====================================================
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from music.manager import MusicManager
 
 
 # =====================================================
-# GLOBAL MANAGER REGISTRY
+# GLOBAL MANAGERS
 # =====================================================
 MANAGERS: dict[int, MusicManager] = {}
 
@@ -41,7 +48,7 @@ class Music(commands.Cog):
         return player
 
     # =================================================
-    # PLAY (QUEUE SYSTEM)
+    # PLAY
     # =================================================
     @commands.hybrid_command(name="play", description="Play music from search or URL")
     async def play(self, ctx: commands.Context, *, query: str):
@@ -59,14 +66,12 @@ class Music(commands.Cog):
             await ctx.send("❌ No results found.")
             return
 
-        track = tracks[0]
+        await manager.add(tracks[0])
 
-        await manager.add(track)
-
-        await ctx.send(f"🎵 Added to queue: **{track.title}**")
+        await ctx.send(f"🎵 Added to queue: **{tracks[0].title}**")
 
     # =================================================
-    # PLAY FILE (LOCAL UPLOAD)
+    # PLAY FILE
     # =================================================
     @commands.hybrid_command(name="playfile", description="Play uploaded audio file")
     async def playfile(self, ctx: commands.Context):
@@ -108,7 +113,6 @@ class Music(commands.Cog):
     async def skip(self, ctx: commands.Context):
 
         manager = get_manager(ctx.guild.id)
-
         await manager.skip()
 
         await ctx.send("⏭ Skipped.")
@@ -144,11 +148,9 @@ class Music(commands.Cog):
             await ctx.send("Nothing is playing.")
             return
 
-        track = manager.current
-
         embed = discord.Embed(
             title="🎵 Now Playing",
-            description=track.title,
+            description=manager.current.title,
             color=discord.Color.blurple()
         )
 
@@ -161,18 +163,21 @@ class Music(commands.Cog):
     async def stop(self, ctx: commands.Context):
 
         manager = get_manager(ctx.guild.id)
-
         await manager.stop()
 
         await ctx.send("⏹ Stopped and cleared queue.")
 
     # =====================================================
-    # 🔥 FIXED WAVELINK EVENT (NO Pool.event)
+    # 🔥 SAFE WAVELINK EVENT (NO VERSION DEPENDENCY)
     # =====================================================
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload):
+    async def on_wavelink_track_end(self, payload):
 
-        player = payload.player
+        try:
+            player = payload.player
+        except Exception:
+            return
+
         if not player:
             return
 
