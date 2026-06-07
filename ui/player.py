@@ -11,10 +11,13 @@ class PlayerView(discord.ui.View):
         cog = self.bot.get_cog("Music")
         return cog.get_player(self.guild_id)
 
-    # ---------------- BACK (FIXED) ----------------
+    # =====================================================
+    # ⏮ BACK (RESTORED FIXED)
+    # =====================================================
     @discord.ui.button(
         label="⏮",
-        style=discord.ButtonStyle.secondary
+        style=discord.ButtonStyle.secondary,
+        row=0
     )
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
 
@@ -26,18 +29,20 @@ class PlayerView(discord.ui.View):
         prev = await gm.previous()
 
         if not prev:
-            await interaction.response.send_message(
+            return await interaction.response.send_message(
                 "No previous track",
                 ephemeral=True
             )
-            return
 
         await interaction.response.defer()
 
-    # ---------------- PLAY/PAUSE ----------------
+    # =====================================================
+    # ⏯ PLAY / PAUSE
+    # =====================================================
     @discord.ui.button(
         label="⏯",
-        style=discord.ButtonStyle.primary
+        style=discord.ButtonStyle.primary,
+        row=0
     )
     async def play_pause(self, interaction: discord.Interaction, button: discord.ui.Button):
 
@@ -53,10 +58,13 @@ class PlayerView(discord.ui.View):
 
         await interaction.response.defer()
 
-    # ---------------- SKIP ----------------
+    # =====================================================
+    # ⏭ SKIP
+    # =====================================================
     @discord.ui.button(
         label="⏭",
-        style=discord.ButtonStyle.secondary
+        style=discord.ButtonStyle.secondary,
+        row=0
     )
     async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
 
@@ -67,10 +75,13 @@ class PlayerView(discord.ui.View):
 
         await interaction.response.defer()
 
-    # ---------------- SHUFFLE ----------------
+    # =====================================================
+    # 🔀 SHUFFLE
+    # =====================================================
     @discord.ui.button(
         label="🔀",
-        style=discord.ButtonStyle.secondary
+        style=discord.ButtonStyle.secondary,
+        row=1
     )
     async def shuffle(self, interaction: discord.Interaction, button: discord.ui.Button):
 
@@ -82,10 +93,57 @@ class PlayerView(discord.ui.View):
             ephemeral=True
         )
 
-    # ---------------- STOP ----------------
+    # =====================================================
+    # 🔊 VOLUME DOWN
+    # =====================================================
+    @discord.ui.button(
+        label="➖",
+        style=discord.ButtonStyle.secondary,
+        row=1
+    )
+    async def vol_down(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        gm = self.gm()
+
+        if not gm.player:
+            return await interaction.response.defer()
+
+        gm.player.volume = max(0, gm.player.volume - 10)
+
+        await interaction.response.send_message(
+            f"🔊 Volume: {gm.player.volume}%",
+            ephemeral=True
+        )
+
+    # =====================================================
+    # 🔊 VOLUME UP
+    # =====================================================
+    @discord.ui.button(
+        label="➕",
+        style=discord.ButtonStyle.secondary,
+        row=1
+    )
+    async def vol_up(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        gm = self.gm()
+
+        if not gm.player:
+            return await interaction.response.defer()
+
+        gm.player.volume = min(100, gm.player.volume + 10)
+
+        await interaction.response.send_message(
+            f"🔊 Volume: {gm.player.volume}%",
+            ephemeral=True
+        )
+
+    # =====================================================
+    # ⏹ STOP
+    # =====================================================
     @discord.ui.button(
         label="⏹",
-        style=discord.ButtonStyle.danger
+        style=discord.ButtonStyle.danger,
+        row=1
     )
     async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
 
