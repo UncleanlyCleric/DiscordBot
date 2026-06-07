@@ -1,4 +1,4 @@
-from re import sub
+#from re import sub
 
 import discord
 from discord.ext import commands
@@ -249,57 +249,59 @@ def build_help_data(bot: commands.Bot):
 
         data.setdefault(category, [])
 
-    help_entry = COMMAND_HELP.get(cmd.name)
+        help_entry = COMMAND_HELP.get(cmd.name)
 
-    data[category].append({
-        "name": cmd.name,
-        "description": (
-            help_entry["description"]
-            if help_entry
-            else (cmd.description or "No description")
-        )
-    })
+        data[category].append({
+            "name": cmd.name,
+            "description": (
+                help_entry["description"]
+                if help_entry
+                else (cmd.description or "No description")
+            )
+        })
 
     # -----------------------------------------
     # Slash Commands
     # -----------------------------------------
     for cmd in bot.tree.get_commands():
 
-        # Group commands (/quote add)
         if isinstance(cmd, discord.app_commands.Group):
 
             category = cmd.name.title()
 
             data.setdefault(category, [])
 
-            key = sub.name
+            for sub in cmd.commands:
 
-            help_entry = COMMAND_HELP.get(key)
+                key = sub.name
 
-            data[category].append({
-                "name": f"{cmd.name} {sub.name}",
-                "description": (
-                    help_entry["description"]
-                    if help_entry
-                    else (sub.description or "No description")
-                )
-            })
+                help_entry = COMMAND_HELP.get(key)
+
+                data[category].append({
+                    "name": f"{cmd.name} {sub.name}",
+                    "description": (
+                        help_entry["description"]
+                        if help_entry
+                        else (sub.description or "No description")
+                    )
+                })
 
         else:
+
             category = "Slash Commands"
 
             data.setdefault(category, [])
 
-            key = sub.name
+            key = cmd.name
 
             help_entry = COMMAND_HELP.get(key)
 
             data[category].append({
-                "name": f"{cmd.name} {sub.name}",
+                "name": cmd.name,
                 "description": (
                     help_entry["description"]
                     if help_entry
-                    else (sub.description or "No description")
+                    else (cmd.description or "No description")
                 )
             })
 
