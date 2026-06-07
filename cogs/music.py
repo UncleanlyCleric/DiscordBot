@@ -24,45 +24,85 @@ class Music(commands.Cog):
             self.players[guild_id] = MusicManager(guild_id)
         return self.players[guild_id]
 
-    # ---------------- SHUFFLE ----------------
+    # ---------------- SHUFFLE COMMAND ----------------
     @commands.hybrid_command(name="shuffle")
     async def shuffle(self, ctx):
-
         gm = self.get_player(ctx.guild.id)
 
         count = await gm.shuffle()
 
-        await ctx.send(
-            f"🔀 Shuffled {count} tracks."
-        )
+        await ctx.send(f"🔀 Shuffled {count} tracks.")
 
-    # ---------------- EMBED ----------------
+    # ---------------- PANEL v2 EMBED ----------------
     def now_playing(self, track, position=0):
         title = getattr(track, "title", "Unknown Title")
         author = getattr(track, "author", "Unknown Artist")
         duration = getattr(track, "length", 0)
 
-        progress = f"{int(position/1000)}s / {int(duration/1000)}s"
+        pos_sec = int(position / 1000)
+        dur_sec = int(duration / 1000) if duration else 0
+
+        # ---------------- progress bar ----------------
+        def make_bar(current, total, length=12):
+            if total <= 0:
+                return "▱" * length
+
+            ratio = min(max(current / total, 0), 1)
+            filled = int(ratio * length)
+            return "▰" * filled + "▱" * (length - filled)
+
+        bar = make_bar(pos_sec, dur_sec)
 
         embed = discord.Embed(
-            title="🎧 Now Playing",
-            description=f"🎵 **{title}**\n🎤 **{author}**",
+            title="🎵 Now Playing",
             color=discord.Color.green()
         )
 
         embed.add_field(
-            name="⏱ Progress",
-            value=progress,
+            name="Track",
+            value=f"**{title}**",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Artist",
+            value=f"`{author}`",
             inline=True
+        )
+
+        embed.add_field(
+            name="Progress",
+            value=f"`{pos_sec}s / {dur_sec}s`",
+            inline=True
+        )
+
+        embed.add_field(
+            name="Bar",
+            value=bar,
+            inline=False
         )
 
         uri = getattr(track, "uri", None)
         if uri:
             embed.add_field(
-                name="🔗 Source",
+                name="Source",
                 value=f"[Open Track]({uri})",
                 inline=False
             )
+
+        # ---------------- footer (volume / radio) ----------------
+        footer = []
+
+        gm = self.get_player(track.guild.id) if hasattr(track, "guild") else None
+
+        if gm:
+            if gm.radio_enabled:
+                footer.append("🔁 Radio ON")
+            if gm.volume != 100:
+                footer.append(f"🔊 Vol {gm.volume}%")
+
+        if footer:
+            embed.set_footer(text=" • ".join(footer))
 
         return embed
 
@@ -80,9 +120,7 @@ class Music(commands.Cog):
 
         voice = ctx.voice_client
         if not voice:
-            voice = await ctx.author.voice.channel.connect(
-                cls=wavelink.Player
-            )
+            voice = await ctx.author.voice.channel.connect(cls=wavelink.Player)
 
         gm.player = voice
 
@@ -94,51 +132,22 @@ class Music(commands.Cog):
         count = 0
 
         for q in queries:
-
             if not isinstance(q, str):
                 continue
 
             try:
-                print("ABOUT TO SEARCH:", q)
-
                 results = await wavelink.Playable.search(q)
-
-                print("SEARCH FINISHED")
-
-                print("================================")
-                print("SEARCH:", q)
-                print("RESULT TYPE:", type(results))
-                print("RESULT COUNT:", len(results) if results else 0)
-                print("================================")
 
                 if not results:
                     continue
 
-                # Playlist support
+                # playlist support
                 if hasattr(results, "tracks"):
-
-                    print(
-                        f"PLAYLIST DETECTED: "
-                        f"{len(results.tracks)} tracks"
-                    )
-
                     for track in results.tracks:
                         await gm.add(track)
                         count += 1
-
-                # Single track
                 else:
                     track = results[0]
-
-                    print(
-                        "TITLE:",
-                        getattr(track, "title", None)
-                    )
-                    print(
-                        "AUTHOR:",
-                        getattr(track, "author", None)
-                    )
-
                     await gm.add(track)
                     count += 1
 
@@ -163,18 +172,11 @@ class Music(commands.Cog):
         gm.message = msg
         gm.view = view
 
-        asyncio.create_task(
-            self.start_progress_updater(ctx.guild.id)
-        )
+        asyncio.create_task(self.start_progress_updater(ctx.guild.id))
 
-        # ---------------- PLAYLIST ----------------
+    # ---------------- PLAYLIST ----------------
     @commands.hybrid_command(name="playlist")
-    async def playlist(
-        self,
-        ctx,
-        url: str,
-        shuffle: bool = False
-    ):
+    async def playlist(self, ctx, url: str, shuffle: bool = False):
 
         if ctx.interaction:
             await ctx.interaction.response.defer()
@@ -186,9 +188,7 @@ class Music(commands.Cog):
 
         voice = ctx.voice_client
         if not voice:
-            voice = await ctx.author.voice.channel.connect(
-                cls=wavelink.Player
-            )
+            voice = await ctx.author.voice.channel.connect(cls=wavelink.Player)
 
         gm.player = voice
 
@@ -199,51 +199,19 @@ class Music(commands.Cog):
         if not queries:
             return await ctx.send("No tracks found.")
 
-        count = 0
         tracks_to_add = []
 
         for q in queries:
-
-            if not isinstance(q, str):
-                continue
-
             try:
                 results = await wavelink.Playable.search(q)
-
-                print("================================")
-                print("SEARCH:", q)
-                print("RESULT TYPE:", type(results))
-                print("RESULT COUNT:", len(results) if results else 0)
-                print("================================")
 
                 if not results:
                     continue
 
-                # Playlist support
                 if hasattr(results, "tracks"):
-
-                    print(
-                        f"PLAYLIST DETECTED: "
-                        f"{len(results.tracks)} tracks"
-                    )
-
-                    for track in results.tracks:
-                        tracks_to_add.append(track)
-
-                # Single track
+                    tracks_to_add.extend(results.tracks)
                 else:
-                    track = results[0]
-
-                    print(
-                        "TITLE:",
-                        getattr(track, "title", None)
-                    )
-                    print(
-                        "AUTHOR:",
-                        getattr(track, "author", None)
-                    )
-
-                    tracks_to_add.append(track)
+                    tracks_to_add.append(results[0])
 
             except Exception as e:
                 log.warning(f"[PLAYLIST ERROR] {q} -> {e}")
@@ -253,59 +221,23 @@ class Music(commands.Cog):
 
         for track in tracks_to_add:
             await gm.add(track)
-            count += 1
 
-        await ctx.send(f"✅ Added {count} tracks")
+        await ctx.send(f"✅ Added {len(tracks_to_add)} tracks")
 
-        # Remove old player panel if one exists
-        if gm.message:
-            try:
-                await gm.message.delete()
-            except Exception:
-                pass
-
-        # Create player controls just like /play
-        view = PlayerView(self.bot, ctx.guild.id)
-
-        msg = await ctx.send(
-            embed=self.now_playing(gm.now_playing, 0)
-            if gm.now_playing
-            else discord.Embed(
-                title="🎧 Player Ready",
-                description="Playlist queued",
-                color=discord.Color.green()
-            ),
-            view=view
-        )
-
-        gm.message = msg
-        gm.view = view
-
-        asyncio.create_task(
-            self.start_progress_updater(ctx.guild.id)
-        )
-        
     # ---------------- TRACK END ----------------
     @commands.Cog.listener()
-    async def on_wavelink_track_end(
-        self,
-        payload: wavelink.TrackEndEventPayload
-    ):
-
+    async def on_wavelink_track_end(self, payload):
         player = payload.player
 
         if not player:
             return
 
-        guild = player.guild
+        gm = self.get_player(player.guild.id)
 
-        if not guild:
+        if gm.skip_lock:
             return
 
-        gm = self.get_player(guild.id)
-
         gm.now_playing = None
-
         await gm.play_next()
 
     # ---------------- UI UPDATER ----------------
@@ -318,10 +250,7 @@ class Music(commands.Cog):
 
                 if gm.message:
                     await gm.message.edit(
-                        embed=self.now_playing(
-                            gm.now_playing,
-                            pos
-                        ),
+                        embed=self.now_playing(gm.now_playing, pos),
                         view=gm.view
                     )
 
