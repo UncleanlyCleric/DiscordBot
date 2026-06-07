@@ -5,6 +5,9 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import wavelink
 import traceback
+import logging
+
+logging.getLogger("discord.ext.commands").setLevel(logging.ERROR)
 
 from utils.logger import setup_logger
 from utils.db import init as init_db
@@ -121,10 +124,14 @@ class Bot(commands.Bot):
         # IMPORTANT: do not block commands
         try:
             await self.process_commands(message)
+
+        except commands.CommandNotFound:
+            pass  # silently ignore !yes, !no, !anything
+
         except Exception as e:
             print("[COMMAND ERROR]", e)
             traceback.print_exc()
-
+            
         # optional raw system debug
         try:
             quotes = self.get_cog("Quotes")
