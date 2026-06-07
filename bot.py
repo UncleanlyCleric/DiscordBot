@@ -7,8 +7,6 @@ import wavelink
 import traceback
 import logging
 
-logging.getLogger("discord.ext.commands").setLevel(logging.ERROR)
-
 from utils.logger import setup_logger
 from utils.db import init as init_db
 
@@ -125,18 +123,20 @@ class Bot(commands.Bot):
         try:
             await self.process_commands(message)
 
-        except commands.CommandNotFound:
-            pass  # silently ignore !yes, !no, !anything
-
         except Exception as e:
-            print("[COMMAND ERROR]", e)
-            traceback.print_exc()
-            
+            # FIX: suppress CommandNotFound spam safely
+            if "CommandNotFound" in str(e):
+                pass
+            else:
+                print("[COMMAND ERROR]", e)
+                traceback.print_exc()
+
         # optional raw system debug
         try:
             quotes = self.get_cog("Quotes")
             if quotes:
                 await quotes.handle_raw_message(message)
+
         except Exception as e:
             print("[QUOTES ERROR]", e)
             traceback.print_exc()
@@ -149,12 +149,12 @@ class Bot(commands.Bot):
 
     async def on_command_error(self, ctx, error):
 
-        # ✅ FIX: silently ignore unknown commands like !yes, !us, etc.
-        if isinstance(error, commands.CommandNotFound):
+        # FIX: fully suppress command-not-found variants
+        if "CommandNotFound" in str(error):
             return
 
-        # Optional: ignore hybrid/app wrapper noise
-        if isinstance(error, commands.HybridCommandError):
+        # ignore hybrid noise
+        if "HybridCommandError" in str(error):
             return
 
         print(f"[COMMAND ERROR] {error}")
@@ -165,7 +165,6 @@ class Bot(commands.Bot):
             error.__traceback__
         )
 
-        # ❌ IMPORTANT FIX: do NOT re-raise CommandNotFound or hybrids
         return
 
 
