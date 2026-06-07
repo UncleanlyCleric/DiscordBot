@@ -7,7 +7,7 @@ from music.manager import MusicManager
 
 
 # =====================================================
-# GLOBAL MANAGER REGISTRY (SHARED STATE)
+# GLOBAL MANAGER REGISTRY
 # =====================================================
 MANAGERS: dict[int, MusicManager] = {}
 
@@ -41,7 +41,7 @@ class Music(commands.Cog):
         return player
 
     # =================================================
-    # PLAY (QUEUE BASED)
+    # PLAY (QUEUE SYSTEM)
     # =================================================
     @commands.hybrid_command(name="play", description="Play music from search or URL")
     async def play(self, ctx: commands.Context, *, query: str):
@@ -66,7 +66,7 @@ class Music(commands.Cog):
         await ctx.send(f"🎵 Added to queue: **{track.title}**")
 
     # =================================================
-    # PLAY FILE (LOCAL UPLOAD → QUEUE)
+    # PLAY FILE (LOCAL UPLOAD)
     # =================================================
     @commands.hybrid_command(name="playfile", description="Play uploaded audio file")
     async def playfile(self, ctx: commands.Context):
@@ -102,7 +102,7 @@ class Music(commands.Cog):
         await ctx.send(f"🎶 Added file to queue: `{attachment.filename}`")
 
     # =====================================================
-    # SKIP (QUEUE SAFE)
+    # SKIP
     # =====================================================
     @commands.hybrid_command(name="skip")
     async def skip(self, ctx: commands.Context):
@@ -133,7 +133,7 @@ class Music(commands.Cog):
             await ctx.send("▶️ Resumed.")
 
     # =====================================================
-    # NOW PLAYING (SOURCE OF TRUTH = MANAGER)
+    # NOW PLAYING
     # =====================================================
     @commands.hybrid_command(name="nowplaying")
     async def nowplaying(self, ctx: commands.Context):
@@ -166,24 +166,21 @@ class Music(commands.Cog):
 
         await ctx.send("⏹ Stopped and cleared queue.")
 
+    # =====================================================
+    # 🔥 FIXED WAVELINK EVENT (NO Pool.event)
+    # =====================================================
+    @commands.Cog.listener()
+    async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload):
 
-# =====================================================
-# 🔥 WAVELINK EVENT HOOK (AUTO PLAY NEXT TRACK)
-# =====================================================
-@wavelink.Pool.event
-async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
+        player = payload.player
+        if not player:
+            return
 
-    player = payload.player
-    if not player:
-        return
+        manager = MANAGERS.get(player.guild.id)
+        if not manager:
+            return
 
-    guild_id = player.guild.id
-
-    manager = MANAGERS.get(guild_id)
-    if not manager:
-        return
-
-    await manager.play_next()
+        await manager.play_next()
 
 
 # =====================================================
