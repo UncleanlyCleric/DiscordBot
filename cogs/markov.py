@@ -21,7 +21,7 @@ class GuildBrain:
         self.traits = {
             "chaos": 0.3,
             "coherence": 0.6,
-            "talkativeness": 0.4
+            "talkativeness": 0.1
         }
 
         self.engagement = {
@@ -176,7 +176,7 @@ class MarkovCog(commands.Cog):
     async def maybe_reply(self, message, brain: GuildBrain, cfg):
         content = message.content.lower()
 
-        chance = 0.03 + brain.traits["talkativeness"]
+        chance = 0.01 + brain.traits["talkativeness"]
 
         if self.bot.user in message.mentions:
             chance = 0.9
@@ -220,22 +220,31 @@ class MarkovCog(commands.Cog):
                 if not cfg["markov_training"]:
                     continue
 
+                target_channel = None
+
                 if cfg["markov_channel_id"]:
-                    continue  # avoids random spam outside channel lock
+                    target_channel = guild.get_channel(cfg["markov_channel_id"])
+
+                    if not target_channel:
+                        continue
 
                 if random.random() > brain.traits["talkativeness"]:
                     continue
 
                 try:
-                    channels = [
-                        c for c in guild.text_channels
-                        if c.permissions_for(guild.me).send_messages
-                    ]
+                    if target_channel:
+                        if target_channel.permissions_for(guild.me).send_messages:
+                            await target_channel.send(self.generate(brain))
+                    else:
+                        channels = [
+                            c for c in guild.text_channels
+                            if c.permissions_for(guild.me).send_messages
+                        ]
 
-                    if not channels:
-                        continue
+                        if not channels:
+                            continue
 
-                    await random.choice(channels).send(self.generate(brain))
+                        await random.choice(channels).send(self.generate(brain))
 
                 except Exception as e:
                     print(f"[Chatter Error] {guild.id}: {e}")

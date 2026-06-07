@@ -96,3 +96,6 @@ services:
 Start up:
 
 docker compose up --build -d
+
+
+markov setup, in discord run /set_markov_channel with channel id of channel.
