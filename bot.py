@@ -15,8 +15,10 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 LAVALINK_URI = os.getenv("LAVALINK_URI")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
 
-# OPTIONAL (use for fast slash testing)
-# GUILD_ID = 1234567890
+# =====================================================
+# OPTIONAL DEV GUILD SYNC (UNCOMMENT FOR INSTANT SLASH UPDATES)
+# =====================================================
+# GUILD_ID = 123456789012345678  # <-- set this
 
 
 # =====================================================
@@ -98,22 +100,24 @@ class Bot(commands.Bot):
                 traceback.print_exc()
 
         # =================================================
-        # DEBUG COMMAND TREE BEFORE SYNC
+        # DEBUG COMMAND TREE
         # =================================================
         print("\n[BOOT] COMMAND TREE BEFORE SYNC:")
-        for cmd in self.tree.walk_commands():
+
+        for cmd in self.tree.get_commands():
             print(f" - /{cmd.name}")
 
-        help_cmd = self.get_command("help")
-        print("[BOOT] PREFIX HELP COMMAND:", help_cmd)
-
         # =================================================
-        # SLASH SYNC
+        # SLASH SYNC (FIXED)
         # =================================================
         print("\n[BOOT] syncing slash commands...")
 
         try:
-            # OPTIONAL FAST TEST (uncomment if needed)
+            # -------------------------------------------------
+            # FAST DEV MODE (recommended during development)
+            # -------------------------------------------------
+            # Uncomment this for instant updates:
+            #
             # guild = discord.Object(id=GUILD_ID)
             # synced = await self.tree.sync(guild=guild)
 
@@ -128,10 +132,12 @@ class Bot(commands.Bot):
             print("[BOOT] SLASH SYNC FAILED:", e)
             traceback.print_exc()
 
+        await self.wait_until_ready()
+
         print("[BOOT] setup_hook finished\n")
 
     # =====================================================
-    # MESSAGE DEBUG PIPELINE
+    # MESSAGE PIPELINE
     # =====================================================
     async def on_message(self, message: discord.Message):
 
@@ -160,7 +166,7 @@ class Bot(commands.Bot):
             traceback.print_exc()
 
     # =====================================================
-    # PREFIX COMMAND DEBUG
+    # PREFIX DEBUG
     # =====================================================
     async def on_command(self, ctx):
         print(f"[COMMAND] {ctx.command} by {ctx.author}")
@@ -173,21 +179,12 @@ class Bot(commands.Bot):
         if isinstance(error, commands.HybridCommandError):
             return
 
-        if "CommandNotFound" in str(error):
-            return
-
-        command_name = getattr(ctx.command, "name", None) or "unknown"
-
-        self.logger.error(f"ERROR in {command_name}: {error}")
+        self.logger.error(f"ERROR: {error}")
 
     # =====================================================
-    # SLASH / APP COMMAND ERROR HANDLER
+    # SLASH ERROR HANDLER
     # =====================================================
-    async def on_app_command_error(
-        self,
-        interaction: discord.Interaction,
-        error: app_commands.AppCommandError
-    ):
+    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
 
         if "CommandNotFound" in str(error):
             return
@@ -200,6 +197,5 @@ class Bot(commands.Bot):
 # =====================================================
 if __name__ == "__main__":
     print("[BOOT] starting bot...")
-
     bot = Bot()
     bot.run(TOKEN)
