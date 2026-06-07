@@ -1,3 +1,5 @@
+from re import sub
+
 import discord
 from discord.ext import commands
 
@@ -247,10 +249,16 @@ def build_help_data(bot: commands.Bot):
 
         data.setdefault(category, [])
 
-        data[category].append({
-            "name": cmd.name,
-            "description": cmd.description or "No description"
-        })
+    help_entry = COMMAND_HELP.get(cmd.name)
+
+    data[category].append({
+        "name": cmd.name,
+        "description": (
+            help_entry["description"]
+            if help_entry
+            else (cmd.description or "No description")
+        )
+    })
 
     # -----------------------------------------
     # Slash Commands
@@ -264,20 +272,35 @@ def build_help_data(bot: commands.Bot):
 
             data.setdefault(category, [])
 
-            for sub in cmd.commands:
-                data[category].append({
-                    "name": f"{cmd.name} {sub.name}",
-                    "description": sub.description or "No description"
-                })
+            key = sub.name
+
+            help_entry = COMMAND_HELP.get(key)
+
+            data[category].append({
+                "name": f"{cmd.name} {sub.name}",
+                "description": (
+                    help_entry["description"]
+                    if help_entry
+                    else (sub.description or "No description")
+                )
+            })
 
         else:
             category = "Slash Commands"
 
             data.setdefault(category, [])
 
+            key = sub.name
+
+            help_entry = COMMAND_HELP.get(key)
+
             data[category].append({
-                "name": cmd.name,
-                "description": cmd.description or "No description"
+                "name": f"{cmd.name} {sub.name}",
+                "description": (
+                    help_entry["description"]
+                    if help_entry
+                    else (sub.description or "No description")
+                )
             })
 
     return data
