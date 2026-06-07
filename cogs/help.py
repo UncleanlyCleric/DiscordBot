@@ -224,7 +224,7 @@ COMMAND_HELP = {
         "Display chaos/coherence/talkativeness"
     ]
 }
-
+}
 
 
 
