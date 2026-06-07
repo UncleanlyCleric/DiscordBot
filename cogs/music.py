@@ -210,8 +210,8 @@ class Music(commands.Cog):
         view = PlayerView(self.bot, ctx.guild.id)
 
         msg = await ctx.send(
-            embed=self.now_playing(gm.now_playing, 0)
-            if gm.now_playing
+            embed=self.now_playing(gm.current, 0)
+            if gm.current
             else discord.Embed(
                 title="🎧 Playlist Loaded",
                 description="Queue ready",
