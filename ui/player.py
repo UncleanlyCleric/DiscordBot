@@ -12,15 +12,18 @@ class PlayerView(discord.ui.View):
         return cog.get_player(self.guild_id)
 
     # =====================================================
-    # ⏮ BACK (RESTORED FIXED)
+    # ⏮ BACK (NOW WORKS WITH HISTORY)
     # =====================================================
     @discord.ui.button(
         label="⏮",
         style=discord.ButtonStyle.secondary,
         row=0
     )
-    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
-
+    async def back(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         gm = self.gm()
 
         if not gm.player:
@@ -30,7 +33,7 @@ class PlayerView(discord.ui.View):
 
         if not prev:
             return await interaction.response.send_message(
-                "No previous track",
+                "No previous track in history.",
                 ephemeral=True
             )
 
@@ -44,8 +47,11 @@ class PlayerView(discord.ui.View):
         style=discord.ButtonStyle.primary,
         row=0
     )
-    async def play_pause(self, interaction: discord.Interaction, button: discord.ui.Button):
-
+    async def play_pause(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         gm = self.gm()
 
         if not gm.player:
@@ -66,13 +72,33 @@ class PlayerView(discord.ui.View):
         style=discord.ButtonStyle.secondary,
         row=0
     )
-    async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
-
+    async def skip(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         gm = self.gm()
 
         if gm.player:
             await gm.player.stop()
 
+        await interaction.response.defer()
+
+    # =====================================================
+    # ⏹ STOP (TRANSPORT ROW)
+    # =====================================================
+    @discord.ui.button(
+        label="⏹",
+        style=discord.ButtonStyle.danger,
+        row=0
+    )
+    async def stop(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+        gm = self.gm()
+        await gm.stop()
         await interaction.response.defer()
 
     # =====================================================
@@ -83,8 +109,11 @@ class PlayerView(discord.ui.View):
         style=discord.ButtonStyle.secondary,
         row=1
     )
-    async def shuffle(self, interaction: discord.Interaction, button: discord.ui.Button):
-
+    async def shuffle(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         gm = self.gm()
         count = await gm.shuffle()
 
@@ -94,60 +123,53 @@ class PlayerView(discord.ui.View):
         )
 
     # =====================================================
-    # 🔊 VOLUME DOWN
+    # 🔊 VOLUME DOWN (FIXED LAVALINK v4)
     # =====================================================
     @discord.ui.button(
         label="➖",
         style=discord.ButtonStyle.secondary,
         row=1
     )
-    async def vol_down(self, interaction: discord.Interaction, button: discord.ui.Button):
-
+    async def vol_down(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         gm = self.gm()
 
         if not gm.player:
             return await interaction.response.defer()
 
-        gm.player.volume = max(0, gm.player.volume - 10)
+        new_volume = max(0, gm.player.volume - 10)
+        await gm.player.set_volume(new_volume)
 
         await interaction.response.send_message(
-            f"🔊 Volume: {gm.player.volume}%",
+            f"🔊 Volume: {new_volume}%",
             ephemeral=True
         )
 
     # =====================================================
-    # 🔊 VOLUME UP
+    # 🔊 VOLUME UP (FIXED LAVALINK v4)
     # =====================================================
     @discord.ui.button(
         label="➕",
         style=discord.ButtonStyle.secondary,
         row=1
     )
-    async def vol_up(self, interaction: discord.Interaction, button: discord.ui.Button):
-
+    async def vol_up(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         gm = self.gm()
 
         if not gm.player:
             return await interaction.response.defer()
 
-        gm.player.volume = min(100, gm.player.volume + 10)
+        new_volume = min(100, gm.player.volume + 10)
+        await gm.player.set_volume(new_volume)
 
         await interaction.response.send_message(
-            f"🔊 Volume: {gm.player.volume}%",
+            f"🔊 Volume: {new_volume}%",
             ephemeral=True
         )
-
-    # =====================================================
-    # ⏹ STOP
-    # =====================================================
-    @discord.ui.button(
-        label="⏹",
-        style=discord.ButtonStyle.danger,
-        row=1
-    )
-    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        gm = self.gm()
-        await gm.stop()
-
-        await interaction.response.defer()
