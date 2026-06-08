@@ -23,6 +23,7 @@ class MusicController:
             )
 
     def stop_loop(self, guild_id: int):
+
         self.running[guild_id] = False
 
         task = self._tasks.get(guild_id)
@@ -37,15 +38,12 @@ class MusicController:
         try:
             while self.running.get(guild_id):
 
-                vc: wavelink.Player = player.guild.voice_client if player.guild else None
+                vc = player.guild.voice_client if player.guild else None
 
-                if not vc:
+                if not vc or not isinstance(vc, wavelink.Player):
                     await asyncio.sleep(1)
                     continue
 
-                # =========================
-                # GET NEXT TRACK
-                # =========================
                 track = player.queue.next()
 
                 if not track:
@@ -56,14 +54,10 @@ class MusicController:
 
                 print(f"[MUSIC] Now playing: {track.title}")
 
-                # =========================
-                # PLAY
-                # =========================
                 try:
                     results = await wavelink.Playable.search(track.uri)
 
                     if not results:
-                        print("[MUSIC] No playable result")
                         continue
 
                     playable = results[0]
@@ -74,9 +68,6 @@ class MusicController:
                     print(f"[MUSIC] Play error: {e}")
                     continue
 
-                # =========================
-                # WAIT FOR FINISH
-                # =========================
                 while vc.playing or vc.paused:
                     await asyncio.sleep(1)
 
@@ -84,3 +75,9 @@ class MusicController:
 
         except asyncio.CancelledError:
             pass
+
+
+# =====================================================
+# 🔥 THIS LINE WAS MISSING (CAUSE OF YOUR CRASH)
+# =====================================================
+music_controller = MusicController()
