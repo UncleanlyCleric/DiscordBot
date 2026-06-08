@@ -16,8 +16,6 @@ from core.audit_logger import audit
 from database.migrations import migration_runner
 
 from services.music.manager import music_manager
-from services.music.runtime import music_runtime
-from services.music.controller import music_controller
 
 
 sys.path.append(str(Path(__file__).resolve().parent))
@@ -102,7 +100,7 @@ class DiscordBot(commands.Bot):
             logging.exception("[CMD] Sync failed")
 
         # =====================================================
-        # RESTORE MUSIC STATE
+        # MUSIC RESTORE
         # =====================================================
         logging.info("[MUSIC] Restoring state...")
 
@@ -110,13 +108,11 @@ class DiscordBot(commands.Bot):
 
         for player in music_manager.get_all():
             try:
-                tracks = await music_runtime.load_queue(player.guild_id)
+                tracks = await player.queue.all()
                 for t in tracks:
                     player.queue.add(t)
             except Exception:
                 logging.exception("[MUSIC] Restore failed %s", player.guild_id)
-
-        await music_runtime.restart_all()
 
     # =====================================================
     # READY
@@ -125,7 +121,7 @@ class DiscordBot(commands.Bot):
         logging.info("[READY] Logged in as %s (%s)", self.user, self.user.id)
 
     # =====================================================
-    # COMMAND AUDIT
+    # AUDIT
     # =====================================================
     async def on_app_command_completion(self, interaction, command):
         audit.command_called(
@@ -147,39 +143,30 @@ class DiscordBot(commands.Bot):
         logging.info("[LAVALINK] Node fully ready: %s", payload.node.identifier)
 
     # =====================================================
-    # TRACK END (FIXED)
+    # TRACK END (FIXED - NO CONTROLLER)
     # =====================================================
     async def on_wavelink_track_end(self, payload):
         """
-        DO NOT mutate state here anymore.
-        Controller handles queue progression.
+        Wavelink handles playback chain internally OR via cog.
+        We do NOT manually control queue here.
         """
 
-        if not payload.player:
+        player = payload.player
+        if not player:
             return
 
-        guild = getattr(payload.player, "guild", None)
+        guild = getattr(player, "guild", None)
         if not guild:
             return
 
-        guild_id = guild.id
-
-        # Let controller decide next track
-        await music_controller.play_next(guild_id)
+        state = music_manager.get_player(guild.id)
+        state.current = None
 
     # =====================================================
     # SHUTDOWN
     # =====================================================
     async def close(self):
         logging.info("[SHUTDOWN] Cleaning up bot...")
-
-        for player in music_manager.get_all():
-            music_controller.stop_loop(player.guild_id)
-
-        try:
-            await music_runtime.shutdown()
-        except Exception:
-            pass
 
         try:
             await wavelink.Pool.disconnect()
