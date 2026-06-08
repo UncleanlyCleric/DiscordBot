@@ -52,7 +52,7 @@ class DiscordBot(commands.Bot):
         await db.connect()
 
         # =====================================================
-        # LAVALINK
+        # LAVALINK NODE
         # =====================================================
         logging.info("[LAVALINK] Connecting node...")
 
@@ -68,7 +68,7 @@ class DiscordBot(commands.Bot):
             nodes=nodes
         )
 
-        # wait for node
+        # wait for node readiness
         for _ in range(20):
             if wavelink.Pool.nodes:
                 break
@@ -91,7 +91,7 @@ class DiscordBot(commands.Bot):
                 logging.exception("[COG] Failed %s", cog)
 
         # =====================================================
-        # SYNC
+        # SYNC COMMANDS
         # =====================================================
         try:
             synced = await self.tree.sync()
@@ -100,7 +100,7 @@ class DiscordBot(commands.Bot):
             logging.exception("[CMD] Sync failed")
 
         # =====================================================
-        # MUSIC RESTORE
+        # RESTORE MUSIC STATE
         # =====================================================
         logging.info("[MUSIC] Restoring state...")
 
@@ -108,7 +108,8 @@ class DiscordBot(commands.Bot):
 
         for player in music_manager.get_all():
             try:
-                tracks = await player.queue.all()
+                # Only restore queue state, NOT playback
+                tracks = player.queue.all()
                 for t in tracks:
                     player.queue.add(t)
             except Exception:
@@ -121,7 +122,7 @@ class DiscordBot(commands.Bot):
         logging.info("[READY] Logged in as %s (%s)", self.user, self.user.id)
 
     # =====================================================
-    # AUDIT
+    # AUDIT LOGGING
     # =====================================================
     async def on_app_command_completion(self, interaction, command):
         audit.command_called(
@@ -137,18 +138,18 @@ class DiscordBot(commands.Bot):
         )
 
     # =====================================================
-    # LAVALINK READY
+    # LAVALINK READY EVENT
     # =====================================================
     async def on_wavelink_node_ready(self, payload):
         logging.info("[LAVALINK] Node fully ready: %s", payload.node.identifier)
 
     # =====================================================
-    # TRACK END (FIXED - NO CONTROLLER)
+    # TRACK END (PRODUCTION SAFE)
     # =====================================================
     async def on_wavelink_track_end(self, payload):
         """
-        Wavelink handles playback chain internally OR via cog.
-        We do NOT manually control queue here.
+        Only update state here.
+        DO NOT control playback (Wavelink or cog handles it).
         """
 
         player = payload.player
@@ -160,6 +161,8 @@ class DiscordBot(commands.Bot):
             return
 
         state = music_manager.get_player(guild.id)
+
+        # clear current track safely
         state.current = None
 
     # =====================================================
