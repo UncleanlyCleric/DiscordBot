@@ -152,9 +152,16 @@ class DiscordBot(commands.Bot):
     # TRACK END
     # =====================================================
     async def on_wavelink_track_end(self, payload):
+
+        if not payload.player:
+            return
+
+        if not payload.player.guild:
+            return
+
         guild_id = payload.player.guild.id
         player = music_manager.get_player(guild_id)
-        await player.skip()
+        player.current = None
 
     # =====================================================
     # CLEAN SHUTDOWN (SAFE ORDER)
