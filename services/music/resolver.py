@@ -1,126 +1,70 @@
-from typing import List, Optional
+from typing import List
+
+import wavelink
 
 from services.music.models import Track
 
 
 class MusicResolver:
     """
-    Converts:
-    - URLs (YouTube, SoundCloud, Apple Music placeholders, Spotify placeholders)
-    - search strings
+    Resolve URLs and searches using Lavalink/Wavelink.
 
-    into normalized Track objects.
-
-    NOTE:
-    Actual streaming extraction (yt-dlp / lavalink plugins)
-    will be plugged in later.
+    Returns normalized Track objects populated with
+    real metadata from the source.
     """
 
-    # -------------------------
-    # ENTRY POINT
-    # -------------------------
+    async def resolve(
+        self,
+        query: str,
+        requester_id: int
+    ) -> List[Track]:
 
-    async def resolve(self, query: str, requester_id: int) -> List[Track]:
         query = query.strip()
 
         if not query:
             return []
 
-        # URL vs search
-        if self._is_url(query):
-            return await self._resolve_url(query, requester_id)
+        try:
+            results = await wavelink.Playable.search(query)
+        except Exception as e:
+            print(f"[Resolver] Search failed: {e}")
+            return []
 
-        return await self._search(query, requester_id)
+        if not results:
+            return []
 
-    # -------------------------
-    # URL DETECTION
-    # -------------------------
+        tracks: List[Track] = []
 
-    def _is_url(self, query: str) -> bool:
-        return query.startswith("http://") or query.startswith("https://")
+        # Playlist support
+        if isinstance(results, wavelink.Playlist):
 
-    # -------------------------
-    # URL RESOLUTION
-    # -------------------------
+            for item in results.tracks:
+                tracks.append(
+                    Track(
+                        title=item.title,
+                        author=getattr(item, "author", None),
+                        uri=item.uri,
+                        source=str(getattr(item, "source", None)),
+                        requester_id=requester_id,
+                    )
+                )
 
-    async def _resolve_url(self, url: str, requester_id: int) -> List[Track]:
-        """
-        Placeholder resolver.
+            return tracks
 
-        Later we will integrate:
-        - yt-dlp (YouTube, SoundCloud, Apple Music metadata extraction)
-        - Lavalink plugins (Spotify / Apple Music via search mapping)
-        """
+        # Search results / single tracks
+        for item in results:
 
-        # YouTube
-        if "youtube.com" in url or "youtu.be" in url:
-            return [Track(
-                title="YouTube Track",
-                author=None,
-                uri=url,
-                source="youtube",
-                requester_id=requester_id
-            )]
+            tracks.append(
+                Track(
+                    title=item.title,
+                    author=getattr(item, "author", None),
+                    uri=item.uri,
+                    source=str(getattr(item, "source", None)),
+                    requester_id=requester_id,
+                )
+            )
 
-        # SoundCloud
-        if "soundcloud.com" in url:
-            return [Track(
-                title="SoundCloud Track",
-                author=None,
-                uri=url,
-                source="soundcloud",
-                requester_id=requester_id
-            )]
-
-        # Apple Music (placeholder mapping)
-        if "music.apple.com" in url:
-            return [Track(
-                title="Apple Music Track",
-                author=None,
-                uri=url,
-                source="apple_music",
-                requester_id=requester_id
-            )]
-
-        # Spotify (cannot stream directly)
-        if "spotify.com" in url:
-            return [Track(
-                title="Spotify Track (mapped)",
-                author=None,
-                uri=url,
-                source="spotify",
-                requester_id=requester_id
-            )]
-
-        # fallback
-        return [Track(
-            title="Unknown Track",
-            author=None,
-            uri=url,
-            source="unknown",
-            requester_id=requester_id
-        )]
-
-    # -------------------------
-    # SEARCH RESOLUTION
-    # -------------------------
-
-    async def _search(self, query: str, requester_id: int) -> List[Track]:
-        """
-        Placeholder search.
-
-        Later we plug in:
-        - YouTube search API (yt-dlp / ytsearch)
-        - Lavalink search endpoint
-        """
-
-        return [Track(
-            title=f"Search result for: {query}",
-            author=None,
-            uri=f"ytsearch:{query}",
-            source="search",
-            requester_id=requester_id
-        )]
+        return tracks
 
 
 music_resolver = MusicResolver()
