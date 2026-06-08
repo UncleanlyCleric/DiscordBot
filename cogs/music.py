@@ -9,8 +9,6 @@ from core.cog_base import BaseCog
 from services.music.manager import music_manager
 from services.music.resolver import music_resolver
 from services.music.controller import music_controller
-from services.music.lavalink.bridge import voice_bridge
-from ui.music_player import MusicPlayerView
 
 
 class MusicCog(BaseCog):
@@ -44,10 +42,15 @@ class MusicCog(BaseCog):
             await self.send_error(interaction, "Join a voice channel first.")
             return
 
+        # connect via controller-owned voice system (no bridge dependency)
         try:
-            await voice_bridge.connect(interaction.guild, voice_state.channel)
+            vc = interaction.guild.voice_client
+            if not vc:
+                await voice_state.channel.connect(cls=wavelink.Player, self_deaf=True)
+            elif vc.channel != voice_state.channel:
+                await vc.move_to(voice_state.channel)
         except Exception as e:
-            await self.send_error(interaction, f"Failed to connect: {e}")
+            await self.send_error(interaction, f"Voice connect failed: {e}")
             return
 
         try:
@@ -64,11 +67,10 @@ class MusicCog(BaseCog):
             return
 
         # =====================================================
-        # QUEUE ONLY (controller handles playback)
+        # QUEUE ONLY (controller handles ALL playback)
         # =====================================================
         player.queue.add_many(tracks)
 
-        # start single playback engine
         await music_controller.start_loop(interaction.guild_id)
 
         embed = discord.Embed(
@@ -77,23 +79,21 @@ class MusicCog(BaseCog):
             color=discord.Color.blurple()
         )
 
-        view = MusicPlayerView(self, interaction.guild_id)
-
-        await interaction.response.send_message(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed)
 
     # =====================================================
-    # /SKIP (FIXED - controller owns playback)
+    # /SKIP (controller-driven)
     # =====================================================
     @app_commands.command(name="skip", description="Skip current track")
     async def skip(self, interaction: discord.Interaction):
 
         vc = interaction.guild.voice_client
 
-        try:
-            if vc:
+        if vc and isinstance(vc, wavelink.Player):
+            try:
                 await vc.stop()
-        except Exception:
-            pass
+            except Exception:
+                pass
 
         await interaction.response.send_message("⏭ Skipped", ephemeral=True)
 
@@ -143,14 +143,14 @@ class MusicCog(BaseCog):
         await interaction.response.send_message(embed=embed)
 
     # =====================================================
-    # /PAUSE (REAL LAVALINK CONTROL)
+    # /PAUSE
     # =====================================================
     @app_commands.command(name="pause", description="Pause playback")
     async def pause(self, interaction: discord.Interaction):
 
         vc = interaction.guild.voice_client
 
-        if not vc:
+        if not vc or not isinstance(vc, wavelink.Player):
             await self.send_error(interaction, "Nothing is playing.")
             return
 
@@ -163,14 +163,14 @@ class MusicCog(BaseCog):
         await interaction.response.send_message("⏸ Paused", ephemeral=True)
 
     # =====================================================
-    # /RESUME (REAL LAVALINK CONTROL)
+    # /RESUME
     # =====================================================
     @app_commands.command(name="resume", description="Resume playback")
     async def resume(self, interaction: discord.Interaction):
 
         vc = interaction.guild.voice_client
 
-        if not vc:
+        if not vc or not isinstance(vc, wavelink.Player):
             await self.send_error(interaction, "Nothing is playing.")
             return
 
@@ -203,7 +203,7 @@ class MusicCog(BaseCog):
         player.queue.clear()
 
         vc = interaction.guild.voice_client
-        if vc:
+        if vc and isinstance(vc, wavelink.Player):
             try:
                 await vc.stop()
                 await vc.disconnect()

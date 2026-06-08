@@ -5,26 +5,41 @@ from services.music.models import Track
 
 
 class VoiceBridge:
-    """
-    ONLY handles voice connection.
-    NO PLAYBACK LOGIC HERE.
-    """
 
     async def connect(self, guild: discord.Guild, channel: discord.VoiceChannel):
+
         if not wavelink.Pool.nodes:
             raise RuntimeError("Lavalink not ready")
 
-        if guild.voice_client:
-            if guild.voice_client.channel != channel:
-                await guild.voice_client.move_to(channel)
-            return guild.voice_client
+        vc = guild.voice_client
 
-        return await channel.connect(cls=wavelink.Player)
+        if vc and isinstance(vc, wavelink.Player):
+            if vc.channel != channel:
+                await vc.move_to(channel)
+            return vc
 
-    async def play(self, *args, **kwargs):
-        raise RuntimeError(
-            "VoiceBridge.play is disabled. Playback is handled by MusicController."
-        )
+        # IMPORTANT: force Wavelink Player
+        return await channel.connect(cls=wavelink.Player, self_deaf=True)
+
+    async def play(self, player: wavelink.Player, track: Track) -> bool:
+
+        if not player or not isinstance(player, wavelink.Player):
+            print("[VOICE] Invalid player type")
+            return False
+
+        results = await wavelink.Playable.search(track.uri)
+
+        if not results:
+            print("[VOICE] No results")
+            return False
+
+        playable = results[0]
+
+        await player.play(playable)
+
+        print(f"[VOICE] Playing: {track.title}")
+
+        return True
 
 
 voice_bridge = VoiceBridge()
