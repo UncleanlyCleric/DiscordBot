@@ -6,100 +6,94 @@ from services.music.manager import music_manager
 
 class MusicEngine:
     """
-    SINGLE SOURCE OF TRUTH FOR ALL PLAYBACK.
+    Production-safe playback engine for Wavelink 4.
     """
 
     def __init__(self):
-        self.locks = {}  # per-guild lock to prevent race conditions
+        self._locks = {}
 
-    # =====================================================
-    # INTERNAL LOCK
-    # =====================================================
-    def _lock(self, guild_id: int):
-        if guild_id not in self.locks:
-            self.locks[guild_id] = asyncio.Lock()
-        return self.locks[guild_id]
+    # -----------------------------------------
+    # GET LOCK PER GUILD (prevents double play)
+    # -----------------------------------------
+    def _get_lock(self, guild_id: int) -> asyncio.Lock:
+        if guild_id not in self._locks:
+            self._locks[guild_id] = asyncio.Lock()
+        return self._locks[guild_id]
 
-    # =====================================================
-    # ENQUEUE + AUTO PLAY
-    # =====================================================
-    async def enqueue(self, guild: wavelink.Player, track):
+    # -----------------------------------------
+    # PLAY NEXT TRACK
+    # -----------------------------------------
+    async def play_next(self, guild: discord.Guild):
+        """
+        Entry point used by cog
+        """
+        player: wavelink.Player = guild.voice_client
+        if not player:
+            return
 
-        state = music_manager.get_player(guild.id)
+        await self._play_next_internal(player)
 
+    async def _play_next_internal(self, player: wavelink.Player):
+        """
+        Core engine loop step.
+        """
+
+        guild_id = player.guild_id  # ✅ THIS is the correct source
+
+        state = music_manager.get_player(guild_id)
+
+        if not state:
+            return
+
+        track = state.queue.next()
+
+        if not track:
+            state.current = None
+            return
+
+        state.current = track
+
+        results = await wavelink.Playable.search(track.uri or track.title)
+
+        if not results:
+            return
+
+        playable = results[0]
+
+        await player.play(playable)
+
+    # -----------------------------------------
+    # ENQUEUE SAFE
+    # -----------------------------------------
+    async def enqueue(self, player: wavelink.Player, track):
+        """
+        Add track and optionally start playback.
+        """
+
+        guild_id = player.guild_id  # ✅ FIX (was broken)
+
+        state = music_manager.get_player(guild_id)
         state.queue.add(track)
 
-        if not guild.playing:
-            await self.play_next(guild)
+        # if nothing is playing → start
+        if not player.playing:
+            await self._play_next_internal(player)
 
-    # =====================================================
-    # CORE PLAYBACK FUNCTION
-    # =====================================================
-    async def play_next(self, guild: wavelink.Player):
+    # -----------------------------------------
+    # STOP
+    # -----------------------------------------
+    async def stop(self, guild: discord.Guild):
+        player: wavelink.Player = guild.voice_client
 
-        async with self._lock(guild.id):
-
-            state = music_manager.get_player(guild.id)
-
-            # already playing
-            if guild.playing:
-                return
-
-            track = state.queue.next()
-
-            if not track:
-                state.current = None
-                return
-
-            state.current = track
-
+        if player:
             try:
-                playable = await wavelink.Playable.search(track.uri or track.title)
-
-                if not playable:
-                    return
-
-                item = playable[0]
-
-                await guild.play(item)
-
-            except Exception as e:
-                print(f"[ENGINE] play error: {e}")
-                await self.play_next(guild)
-
-    # =====================================================
-    # SKIP
-    # =====================================================
-    async def skip(self, guild: wavelink.Player):
-        try:
-            await guild.stop()
-        except Exception:
-            pass
-
-    # =====================================================
-    # STOP (FULL RESET)
-    # =====================================================
-    async def stop(self, guild: wavelink.Player):
+                await player.stop()
+            except Exception:
+                pass
 
         state = music_manager.get_player(guild.id)
-
+        state.current = None
         state.queue.clear()
-        state.current = None
-
-        try:
-            await guild.stop()
-        except Exception:
-            pass
-
-    # =====================================================
-    # TRACK END HANDLER
-    # =====================================================
-    async def on_track_end(self, guild: wavelink.Player):
-
-        state = music_manager.get_player(guild.id)
-        state.current = None
-
-        await self.play_next(guild)
 
 
 engine = MusicEngine()
