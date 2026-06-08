@@ -1,54 +1,18 @@
-from pathlib import Path
 import os
-
-import yaml
-from dotenv import load_dotenv
-
-
-load_dotenv()
 
 
 class Config:
-    def __init__(self, config_path: str = "application.yml"):
-        path = Path(config_path)
+    def __init__(self):
+        self.discord_token = os.getenv("DISCORD_TOKEN")
 
-        if not path.exists():
-            raise FileNotFoundError(
-                f"Configuration file not found: {config_path}"
-            )
+        self.lavalink_uri = os.getenv("LAVALINK_URI", "http://localhost:2333")
+        self.lavalink_password = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
 
-        with open(path, "r", encoding="utf-8") as fp:
-            self.data = yaml.safe_load(fp)
+        self.db_path = os.getenv("DATABASE_PATH", "bot.db")
 
-    def get(self, *keys, default=None):
-        value = self.data
-
-        for key in keys:
-            if not isinstance(value, dict):
-                return default
-
-            value = value.get(key)
-
-            if value is None:
-                return default
-
-        return value
-
-    @property
-    def discord_token(self) -> str:
-        return os.getenv("DISCORD_TOKEN", "")
-
-    @property
-    def lavalink_host(self) -> str:
-        return os.getenv("LAVALINK_HOST", "localhost")
-
-    @property
-    def lavalink_port(self) -> int:
-        return int(os.getenv("LAVALINK_PORT", "2333"))
-
-    @property
-    def lavalink_password(self) -> str:
-        return os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
+    def get(self, section: str, key: str):
+        # backwards compatibility (optional legacy support)
+        return os.getenv(f"{section.upper()}_{key.upper()}")
 
 
 config = Config()
