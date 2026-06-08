@@ -63,10 +63,12 @@ class MusicCog(BaseCog):
             await self.send_error(interaction, "No results found.")
             return
 
-        # queue tracks
+        # =====================================================
+        # QUEUE ONLY (controller handles playback)
+        # =====================================================
         player.queue.add_many(tracks)
 
-        # IMPORTANT FIX: start controller loop (NOT runtime)
+        # start single playback engine
         await music_controller.start_loop(interaction.guild_id)
 
         embed = discord.Embed(
@@ -80,7 +82,7 @@ class MusicCog(BaseCog):
         await interaction.response.send_message(embed=embed, view=view)
 
     # =====================================================
-    # /SKIP
+    # /SKIP (FIXED - controller owns playback)
     # =====================================================
     @app_commands.command(name="skip", description="Skip current track")
     async def skip(self, interaction: discord.Interaction):
@@ -90,13 +92,6 @@ class MusicCog(BaseCog):
         try:
             if vc:
                 await vc.stop()
-        except Exception:
-            pass
-
-        player = self.manager.get_player(interaction.guild_id)
-
-        try:
-            await player.skip()
         except Exception:
             pass
 
@@ -148,7 +143,7 @@ class MusicCog(BaseCog):
         await interaction.response.send_message(embed=embed)
 
     # =====================================================
-    # /PAUSE (FIXED - REAL LAVALINK CONTROL)
+    # /PAUSE (REAL LAVALINK CONTROL)
     # =====================================================
     @app_commands.command(name="pause", description="Pause playback")
     async def pause(self, interaction: discord.Interaction):
@@ -160,7 +155,7 @@ class MusicCog(BaseCog):
             return
 
         try:
-            await vc.pause()
+            await vc.pause(True)
         except Exception as e:
             await self.send_error(interaction, f"Pause failed: {e}")
             return
@@ -168,7 +163,7 @@ class MusicCog(BaseCog):
         await interaction.response.send_message("⏸ Paused", ephemeral=True)
 
     # =====================================================
-    # /RESUME (FIXED)
+    # /RESUME (REAL LAVALINK CONTROL)
     # =====================================================
     @app_commands.command(name="resume", description="Resume playback")
     async def resume(self, interaction: discord.Interaction):
@@ -180,7 +175,7 @@ class MusicCog(BaseCog):
             return
 
         try:
-            await vc.resume()
+            await vc.pause(False)
         except Exception as e:
             await self.send_error(interaction, f"Resume failed: {e}")
             return
@@ -196,7 +191,7 @@ class MusicCog(BaseCog):
         await self.send_success(interaction, "Music loop started")
 
     # =====================================================
-    # /MUSIC_STOP (FIXED CLEANLY)
+    # /MUSIC_STOP
     # =====================================================
     @app_commands.command(name="music_stop", description="Stop music and disconnect")
     async def music_stop(self, interaction: discord.Interaction):

@@ -5,10 +5,14 @@ from services.music.models import Track
 
 
 class VoiceBridge:
+    """
+    ONLY handles voice connection.
+    NO PLAYBACK LOGIC HERE.
+    """
 
     async def connect(self, guild: discord.Guild, channel: discord.VoiceChannel):
         if not wavelink.Pool.nodes:
-            raise RuntimeError("Lavalink is not ready")
+            raise RuntimeError("Lavalink not ready")
 
         if guild.voice_client:
             if guild.voice_client.channel != channel:
@@ -17,51 +21,10 @@ class VoiceBridge:
 
         return await channel.connect(cls=wavelink.Player)
 
-    async def play(self, guild: discord.Guild, track: Track) -> bool:
-        player: wavelink.Player = guild.voice_client
-
-        if not player:
-            return False
-
-        # 🚨 KEY FIX: DO NOT re-search here
-        # The resolver ALREADY decided what this is
-        query = track.uri
-
-        try:
-            # Let wavelink fully resolve properly
-            results = await wavelink.Playable.search(query)
-        except Exception as e:
-            print(f"[VoiceBridge] search error: {e}")
-            return False
-
-        if not results:
-            return False
-
-        playable = results[0]
-
-        # 🚨 CRITICAL FIX: ensure proper encoding exists
-        if not getattr(playable, "encoded", None):
-            try:
-                playable = await wavelink.Playable.search(f"ytsearch:{track.title}")
-                playable = playable[0] if playable else None
-            except Exception:
-                return False
-
-        if not playable:
-            return False
-
-        try:
-            # 🚨 IMPORTANT: stop current before playing new track
-            if player.playing or player.paused:
-                await player.stop()
-
-            await player.play(playable)
-
-            return True
-
-        except Exception as e:
-            print(f"[VoiceBridge] play failed: {e}")
-            return False
+    async def play(self, *args, **kwargs):
+        raise RuntimeError(
+            "VoiceBridge.play is disabled. Playback is handled by MusicController."
+        )
 
 
 voice_bridge = VoiceBridge()
