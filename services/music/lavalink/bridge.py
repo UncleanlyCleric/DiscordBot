@@ -15,42 +15,63 @@ class VoiceBridge:
         channel: discord.VoiceChannel,
     ):
         if not wavelink.Pool.nodes:
-            raise RuntimeError(
-                "Lavalink is not ready (no active nodes)"
-            )
+            raise RuntimeError("Lavalink is not ready (no active nodes)")
 
         voice_client = guild.voice_client
 
         if voice_client:
             if voice_client.channel != channel:
                 await voice_client.move_to(channel)
-
             return voice_client
 
-        return await channel.connect(
-            cls=wavelink.Player
-        )
+        return await channel.connect(cls=wavelink.Player)
 
-    async def play(
-        self,
-        guild: discord.Guild,
-        track: Track,
-    ) -> bool:
+    # =====================================================
+    # FIXED PLAY LOGIC
+    # =====================================================
+    async def play(self, guild: discord.Guild, track: Track) -> bool:
         player: wavelink.Player = guild.voice_client
 
         if not player:
             return False
 
-        results = await wavelink.Playable.search(
-            track.uri
-        )
+        query = track.uri
+
+        # -------------------------------------------------
+        # FIX 1: normalize search prefixes
+        # -------------------------------------------------
+        if not query.startswith(("http", "ytmsearch:", "scsearch:")):
+            query = f"ytmsearch:{query}"
+
+        # -------------------------------------------------
+        # FIX 2: search Lavalink safely
+        # -------------------------------------------------
+        try:
+            results = await wavelink.Playable.search(query)
+        except Exception as e:
+            print(f"[VoiceBridge] search failed: {e}")
+            return False
 
         if not results:
             return False
 
         playable = results[0]
 
-        await player.play(playable)
+        # -------------------------------------------------
+        # FIX 3: guard against null encoding (YOUR BUG)
+        # -------------------------------------------------
+        if not getattr(playable, "encoded", None) and not getattr(playable, "identifier", None):
+            print("[VoiceBridge] invalid playable received")
+            return False
+
+        # -------------------------------------------------
+        # FIX 4: play safely
+        # -------------------------------------------------
+        try:
+            await player.play(playable)
+        except Exception as e:
+            print(f"[VoiceBridge] play failed: {e}")
+            return False
 
         return True
 
