@@ -1,38 +1,62 @@
-import json
 import os
 
-CONFIG_PATH = "data/guild_config.json"
+
+class Config:
+    """
+    Centralized config loader.
+    SAFE: no IO, no DB, no external calls on import.
+    """
+
+    def __init__(self):
+        self._loaded = False
+        self._cache = {}
+
+    def load(self):
+        """
+        Loads environment-based config lazily.
+        """
+        if self._loaded:
+            return self._cache
+
+        self._cache = {
+            "token": os.getenv("DISCORD_TOKEN") or os.getenv("TOKEN"),
+            "db_url": os.getenv("DB_URL"),
+            "prefix": os.getenv("PREFIX", "!"),
+            "music_enabled": os.getenv("MUSIC_ENABLED", "true").lower() == "true",
+
+            # Markov defaults
+            "markov_training": True,
+            "markov_channel_id": None,
+        }
+
+        self._loaded = True
+        return self._cache
+
+    def get(self, key: str, default=None):
+        cfg = self.load()
+        return cfg.get(key, default)
 
 
-def _load():
-    if not os.path.exists(CONFIG_PATH):
-        return {}
-    with open(CONFIG_PATH, "r") as f:
-        return json.load(f)
+# ---------------------------
+# Singleton
+# ---------------------------
+
+config = Config()
 
 
-def _save(data):
-    os.makedirs("data", exist_ok=True)
-    with open(CONFIG_PATH, "w") as f:
-        json.dump(data, f, indent=2)
+# ---------------------------
+# Backward Compatibility
+# ---------------------------
 
+def get(guild_id=None):
+    """
+    Legacy API expected by older cogs.
 
-config_cache = _load()
+    Old code:
+        from utils.config import get as get_cfg
+        cfg = get_cfg(guild_id)
 
+    Returns a dict-like config object.
+    """
 
-def get(guild_id: int):
-    return config_cache.get(str(guild_id), {
-        "dj_role_id": None,
-        "markov_channel_id": None,
-        "markov_training": True
-    })
-
-
-def set_value(guild_id: int, key: str, value):
-    gid = str(guild_id)
-
-    if gid not in config_cache:
-        config_cache[gid] = get(guild_id)
-
-    config_cache[gid][key] = value
-    _save(config_cache)
+    return config.load()

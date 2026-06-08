@@ -2,22 +2,35 @@ import logging
 import sys
 
 
-def setup_logger():
-    logger = logging.getLogger("bot")
-    logger.setLevel(logging.INFO)
+class Logger:
+    def __init__(self, name="bot", level=logging.INFO):
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(level)
 
-    # Prevent duplicate handlers
-    if logger.handlers:
-        return logger
+        if not self.logger.handlers:
+            handler = logging.StreamHandler(sys.stdout)
 
-    handler = logging.StreamHandler(sys.stdout)
+            formatter = logging.Formatter(
+                "[%(asctime)s] [%(levelname)s] %(name)s: %(message)s"
+            )
 
-    formatter = logging.Formatter(
-        "[%(asctime)s] [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
 
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+        self.logger.propagate = False
 
-    return logger
+    def info(self, msg):
+        self.logger.info(msg)
+
+    def warning(self, msg):
+        self.logger.warning(msg)
+
+    def error(self, msg):
+        self.logger.error(msg)
+
+    def debug(self, msg):
+        self.logger.debug(msg)
+
+
+# ✅ singleton (safe global access)
+logger = Logger()

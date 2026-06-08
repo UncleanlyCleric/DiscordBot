@@ -1,167 +1,81 @@
+import random
 import discord
 from discord.ext import commands
-from discord import app_commands
 
-from utils.db import add, fetch_random, search, delete, edit
+from utils.db import db
 
 
-class Quotes(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+class QuotesCog(commands.Cog):
+    def __init__(self, bot):
         self.bot = bot
 
-    # =====================================================
-    # SAFE SEND
-    # =====================================================
-    async def safe_send(self, channel: discord.abc.Messageable, content: str):
-        try:
-            await channel.send(content)
-        except discord.Forbidden:
-            pass
-        except Exception as e:
-            self.bot.logger.error(f"SAFE_SEND ERROR: {e}")
+        db.connect()
+        db.init_schema()
 
-    # =====================================================
-    # RAW MESSAGE HANDLER
-    # =====================================================
-    async def handle_raw_message(self, message: discord.Message):
-        if not message.guild or message.author.bot:
-            return
+    @commands.command(name="addquote")
+    async def add_quote(self, ctx, category: str, *, quote: str):
+        category = category.lower()
 
-        content = message.content.strip()
+        cur = db.cursor()
 
-        print(f"[QUOTES DEBUG] raw: {content}")
-
-        # =================================================
-        # IGNORE REAL COMMANDS (FIXED SAFETY FILTER)
-        # =================================================
-        if content.startswith("!"):
-            cmd = content[1:].split(" ", 1)[0].lower()
-
-            # Let real bot commands pass through normally
-            if cmd in ["help", "play", "skip", "stop", "quote", "searchquote", "delquote", "editquote"]:
-                return
-
-            # =================================================
-            # ➕ !add<category> <text>
-            # =================================================
-            if cmd.startswith("add"):
-                try:
-                    raw = content[4:].strip()
-
-                    if not raw:
-                        await self.safe_send(message.channel, "Usage: `!add<category> <text>`")
-                        return
-
-                    parts = raw.split(" ", 1)
-                    if len(parts) != 2:
-                        await self.safe_send(message.channel, "Usage: `!add<category> <text>`")
-                        return
-
-                    category, text = parts
-                    category = category.lower().strip()
-
-                    print(f"[QUOTES DEBUG] add -> category={category}, text={text}")
-
-                    await add(
-                        guild_id=message.guild.id,
-                        category=category,
-                        content=text,
-                        author_id=str(message.author.id)
-                    )
-
-                    await self.safe_send(message.channel, f"✅ Added to `{category}`")
-
-                except Exception as e:
-                    self.bot.logger.error(f"ADD QUOTE ERROR: {e}")
-                    await self.safe_send(message.channel, "❌ Failed to add quote.")
-
-                return
-
-            # =================================================
-            # 💬 !<category> (QUOTE FETCH)
-            # =================================================
-            category = cmd.lower().strip()
-
-            print(f"[QUOTES DEBUG] fetch category={category}")
-
-            try:
-                result = await fetch_random(message.guild.id, category)
-
-                if result:
-                    await self.safe_send(message.channel, f"💬 {result}")
-
-            except Exception as e:
-                self.bot.logger.error(f"DB FETCH ERROR: {e}")
-
-            return
-
-    # =====================================================
-    # PREFIX COMMANDS
-    # =====================================================
-    @commands.command(name="searchquote")
-    async def searchquote(self, ctx, *, query: str):
-        results = await search(ctx.guild.id, query)
-
-        if not results:
-            return await ctx.send("No matches.")
-
-        msg = "\n".join([f"`{r[0]}` [{r[1]}] {r[2]}" for r in results[:10]])
-        await ctx.send(msg)
-
-    @commands.command(name="delquote")
-    async def delquote(self, ctx, quote_id: int):
-        ok = await delete(quote_id, ctx.guild.id)
-        await ctx.send("🗑️ Deleted" if ok else "Not found")
-
-    @commands.command(name="editquote")
-    async def editquote(self, ctx, quote_id: int, *, text: str):
-        ok = await edit(quote_id, ctx.guild.id, text)
-        await ctx.send("✏️ Updated" if ok else "Not found")
-
-    # =====================================================
-    # SLASH COMMAND GROUP
-    # =====================================================
-    quote = app_commands.Group(
-        name="quote",
-        description="Quote system"
-    )
-
-    @quote.command(name="add")
-    async def slash_add(self, interaction: discord.Interaction, category: str, content: str):
-        await add(
-            interaction.guild.id,
-            category.lower(),
-            content,
-            str(interaction.user.id)
+        cur.execute(
+            """
+            INSERT INTO quotes
+            (guild_id, category, quote, author, user_id)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                str(ctx.guild.id),
+                category,
+                quote,
+                str(ctx.author),
+                str(ctx.author.id),
+            ),
         )
 
-        await interaction.response.send_message("✅ Quote added.", ephemeral=True)
+        db.conn.commit()
 
-    @quote.command(name="get")
-    async def slash_get(self, interaction: discord.Interaction, category: str):
-        result = await fetch_random(interaction.guild.id, category.lower())
+        await ctx.send(f"Saved quote in **{category}**")
 
-        if not result:
-            return await interaction.response.send_message(
-                "No quotes found.",
-                ephemeral=True
-            )
+    @commands.command(name="quote")
+    async def quote(self, ctx, category: str):
+        category = category.lower()
 
-        await interaction.response.send_message(f"💬 {result}")
+        cur = db.cursor()
 
-    @quote.command(name="search")
-    async def slash_search(self, interaction: discord.Interaction, query: str):
-        results = await search(interaction.guild.id, query)
+        cur.execute(
+            """
+            SELECT quote, author
+            FROM quotes
+            WHERE guild_id = ?
+            AND category = ?
+            """,
+            (
+                str(ctx.guild.id),
+                category,
+            ),
+        )
 
-        if not results:
-            return await interaction.response.send_message(
-                "No matches found.",
-                ephemeral=True
-            )
+        rows = cur.fetchall()
 
-        msg = "\n".join([f"`{r[0]}` [{r[1]}] {r[2]}" for r in results[:10]])
-        await interaction.response.send_message(msg, ephemeral=True)
+        if not rows:
+            await ctx.send(f"No quotes found in **{category}**")
+            return
+
+        quote_text, author = random.choice(rows)
+
+        embed = discord.Embed(
+            title=f"{category.title()} Quote",
+            description=quote_text,
+            color=discord.Color.blurple(),
+        )
+
+        embed.set_footer(
+            text=f"Added by {author or 'Unknown'}"
+        )
+
+        await ctx.send(embed=embed)
 
 
-async def setup(bot: commands.Bot):
-    await bot.add_cog(Quotes(bot))
+async def setup(bot):
+    await bot.add_cog(QuotesCog(bot))

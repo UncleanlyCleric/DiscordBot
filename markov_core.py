@@ -1,128 +1,113 @@
 import random
-import re
 from collections import defaultdict
 
 
-# -----------------------------
-# TOKENIZATION
-# -----------------------------
+class MarkovCore:
+    """
+    SAFE MARKOV TEXT ENGINE
 
-def tokenize(text: str):
-    return re.findall(r"\b\w+\b|[.!?]", text.lower())
+    RULES:
+    - no file IO at import time
+    - no DB dependency
+    - no bot dependency
+    - pure in-memory model
+    """
 
-
-# -----------------------------
-# MARKOV CHAIN (TRIGRAM + WEIGHTS)
-# -----------------------------
-
-class MarkovChain:
     def __init__(self):
-        # trigram -> {next_word: weight}
-        self.chain = defaultdict(lambda: defaultdict(float))
+        self.model = defaultdict(list)
+        self.built = False
 
-        # starting points (for sentence initiation)
-        self.starts = []
-
-    # -----------------------------
-    # TRAINING
-    # -----------------------------
+    # ---------------------------
+    # Training
+    # ---------------------------
 
     def train(self, text: str):
-        words = tokenize(text)
+        words = text.split()
 
-        if len(words) < 4:
+        if len(words) < 2:
             return
 
-        # store start state
-        self.starts.append((words[0], words[1], words[2]))
+        for i in range(len(words) - 1):
+            self.model[words[i]].append(words[i + 1])
 
-        # build trigram transitions
-        for i in range(len(words) - 3):
-            key = (words[i], words[i + 1], words[i + 2])
-            nxt = words[i + 3]
+        self.built = True
 
-            self.chain[key][nxt] += 1.0
+    # ---------------------------
+    # Generation
+    # ---------------------------
 
-    # -----------------------------
-    # GENERATION
-    # -----------------------------
+    def generate(self, start_word: str = None, length: int = 20):
+        if not self.model:
+            return ""
 
-    def generate(self, max_words=30):
-        if not self.chain or not self.starts:
-            return "..."
+        if not start_word or start_word not in self.model:
+            start_word = random.choice(list(self.model.keys()))
 
-        w1, w2, w3 = random.choice(self.starts)
-        output = [w1, w2, w3]
+        word = start_word
+        output = [word]
 
-        for _ in range(max_words):
-            key = (output[-3], output[-2], output[-1])
+        for _ in range(length - 1):
+            next_words = self.model.get(word)
 
-            options = self.chain.get(key)
-            if not options:
+            if not next_words:
                 break
 
-            words = list(options.keys())
-            weights = list(options.values())
+            word = random.choice(next_words)
+            output.append(word)
 
-            nxt = random.choices(words, weights=weights, k=1)[0]
-            output.append(nxt)
+        return " ".join(output)
 
-            if nxt in ".!?":
-                break
-
-        return " ".join(output).capitalize()
-
-    # -----------------------------
-    # MEMORY DECAY
-    # -----------------------------
-
-    def decay(self, rate: float = 0.995, floor: float = 0.05):
-        """
-        Gradually reduces memory strength over time.
-        Prevents infinite growth + removes unused language.
-        """
-
-        for key in list(self.chain.keys()):
-            inner = self.chain[key]
-
-            for word in list(inner.keys()):
-                inner[word] *= rate
-
-                if inner[word] < floor:
-                    del inner[word]
-
-            if not inner:
-                del self.chain[key]
-
-        # optional: slowly decay start memory too
-        if len(self.starts) > 5000:
-            self.starts = self.starts[-5000:]
-
-    # -----------------------------
-    # SERIALIZATION
-    # -----------------------------
+    # ---------------------------
+    # Persistence Support
+    # ---------------------------
 
     def to_dict(self):
         return {
-            "starts": self.starts,
-            "chain": {
-                str(k): dict(v)
-                for k, v in self.chain.items()
-            }
+            "model": dict(self.model),
+            "built": self.built
         }
 
     @classmethod
     def from_dict(cls, data):
         obj = cls()
 
-        obj.starts = [
-            tuple(x) for x in data.get("starts", [])
-        ]
+        model = data.get("model", {})
 
-        for k, v in data.get("chain", {}).items():
-            obj.chain[tuple(eval(k))] = defaultdict(
-                float,
-                v
-            )
+        for key, values in model.items():
+            obj.model[key] = list(values)
 
+        obj.built = data.get("built", bool(obj.model))
         return obj
+
+    # ---------------------------
+    # Compatibility Methods
+    # ---------------------------
+
+    def decay(self):
+        """
+        Compatibility stub for older Markov cog.
+        Safe no-op.
+        """
+        pass
+
+    # ---------------------------
+    # Reset / Utility
+    # ---------------------------
+
+    def clear(self):
+        self.model.clear()
+        self.built = False
+
+
+# --------------------------------
+# Backward Compatibility Alias
+# --------------------------------
+
+MarkovChain = MarkovCore
+
+
+# --------------------------------
+# Singleton
+# --------------------------------
+
+markov_core = MarkovCore()

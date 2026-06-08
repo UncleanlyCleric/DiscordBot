@@ -1,139 +1,139 @@
-import asyncio
-import time
+from collections import defaultdict
 import logging
-import wavelink
-import random
 
-log = logging.getLogger("music")
+log = logging.getLogger(__name__)
 
 
 class MusicManager:
-    def __init__(self, guild_id: int):
+    """
+    SAFE MUSIC CORE SERVICE
 
-        self.guild_id = guild_id
+    Rules:
+    - NO discord imports
+    - NO UI imports
+    - NO DB imports
+    - NO initialization at import time
+    """
 
-        # =========================
-        # CORE STATE
-        # =========================
-        self.queue: asyncio.Queue[wavelink.Playable] = asyncio.Queue()
-        self.history: list[wavelink.Playable] = []
-        self.current: wavelink.Playable | None = None
+    def __init__(self):
+        # guild_id -> queue list
+        self.queues = defaultdict(list)
 
-        # =========================
-        # PLAYER
-        # =========================
-        self.player: wavelink.Player | None = None
-        self.lock = asyncio.Lock()
+        # guild_id -> current track state
+        self.current = {}
 
-        # =========================
-        # SETTINGS
-        # =========================
-        self.volume = 100
+        # guild_id -> voice state (injected later)
+        self.voice_clients = {}
 
-        # =========================
-        # STATE
-        # =========================
-        self.last_active = time.time()
+    # ---------------------------
+    # Queue Management
+    # ---------------------------
 
-    # =====================================================
-    # PLAYER BIND
-    # =====================================================
-    def bind_player(self, player: wavelink.Player):
-        self.player = player
-        self.touch()
+    def add_to_queue(self, guild_id: int, track: dict):
+        self.queues[guild_id].append(track)
 
-    # =====================================================
-    # STATE HELPERS
-    # =====================================================
-    def touch(self):
-        self.last_active = time.time()
+        log.debug(
+            "Track queued (guild=%s, size=%s)",
+            guild_id,
+            len(self.queues[guild_id])
+        )
 
-    def is_idle(self):
-        return self.current is None and self.queue.empty()
+    def get_queue(self, guild_id: int):
+        return self.queues[guild_id]
 
-    # =====================================================
-    # VOLUME
-    # =====================================================
-    async def set_volume(self, value: int):
-        self.volume = max(0, min(100, value))
+    def clear_queue(self, guild_id: int):
+        self.queues[guild_id].clear()
 
-        if self.player:
-            await self.player.set_volume(self.volume)
+        log.debug(
+            "Queue cleared (guild=%s)",
+            guild_id
+        )
 
-    # =====================================================
-    # QUEUE SNAPSHOT
-    # =====================================================
-    def get_queue_snapshot(self, limit: int = 10):
-        return list(getattr(self.queue, "_queue", []))[:limit]
+    def queue_size(self, guild_id: int) -> int:
+        return len(self.queues[guild_id])
 
-    # =====================================================
-    # ADD TRACK
-    # =====================================================
-    async def add(self, track):
-        self.touch()
+    def has_queue(self, guild_id: int) -> bool:
+        return bool(self.queues[guild_id])
 
-        await self.queue.put(track)
+    def peek_next(self, guild_id: int):
+        queue = self.queues[guild_id]
 
-        if not self.current:
-            await self.play_next()
+        if not queue:
+            return None
 
-    # =====================================================
-    # PLAY NEXT (AUTO FLOW CORE)
-    # =====================================================
-    async def play_next(self):
-        async with self.lock:
+        return queue[0]
 
-            if not self.player:
-                return
+    # ---------------------------
+    # Playback State
+    # ---------------------------
 
-            next_track = None
+    def set_current(self, guild_id: int, track: dict):
+        self.current[guild_id] = track
 
-            if not self.queue.empty():
-                next_track = await self.queue.get()
+    def get_current(self, guild_id: int):
+        return self.current.get(guild_id)
 
-            if not next_track:
-                self.current = None
-                return
+    def clear_current(self, guild_id: int):
+        self.current.pop(guild_id, None)
 
-            if self.current:
-                self.history.append(self.current)
+    # ---------------------------
+    # Voice Layer (injected)
+    # ---------------------------
 
-            self.current = next_track
-            self.touch()
+    def set_voice(self, guild_id: int, voice_client):
+        self.voice_clients[guild_id] = voice_client
 
-            try:
-                await self.player.play(next_track)
-                await self.player.set_volume(self.volume)
-            except Exception as e:
-                log.exception(f"play failed: {e}")
-                self.current = None
+    def get_voice(self, guild_id: int):
+        return self.voice_clients.get(guild_id)
 
-    # =====================================================
-    # SKIP
-    # =====================================================
-    async def skip(self):
-        if self.player:
-            await self.player.stop()
+    def remove_voice(self, guild_id: int):
+        self.voice_clients.pop(guild_id, None)
 
-    # =====================================================
-    # STOP
-    # =====================================================
-    async def stop(self):
+    # ---------------------------
+    # Playback Logic Hooks
+    # ---------------------------
 
-        self.current = None
-        self.history.clear()
+    def next_track(self, guild_id: int):
+        queue = self.queues[guild_id]
 
-        while not self.queue.empty():
-            try:
-                self.queue.get_nowait()
-            except Exception:
-                break
+        if not queue:
+            self.clear_current(guild_id)
+            return None
 
-        try:
-            if self.player:
-                await self.player.stop()
-                await self.player.disconnect()
-        except Exception:
-            pass
+        track = queue.pop(0)
+        self.set_current(guild_id, track)
 
-        self.player = None
+        log.debug(
+            "Dequeued track (guild=%s, remaining=%s)",
+            guild_id,
+            len(queue)
+        )
+
+        return track
+
+    # ---------------------------
+    # Cleanup
+    # ---------------------------
+
+    def cleanup_guild(self, guild_id: int):
+        """
+        Completely remove guild state.
+
+        Call when:
+        - bot disconnects
+        - queue finishes
+        - guild removed
+        """
+
+        self.queues.pop(guild_id, None)
+        self.current.pop(guild_id, None)
+        self.voice_clients.pop(guild_id, None)
+
+        log.info(
+            "Guild music state cleaned up (guild=%s)",
+            guild_id
+        )
+
+
+# Singleton instance (safe, no side effects)
+music_manager = MusicManager()

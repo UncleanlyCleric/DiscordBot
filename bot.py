@@ -1,201 +1,120 @@
 import os
 import discord
 from discord.ext import commands
-from dotenv import load_dotenv
-import wavelink
-import traceback
-from discord import app_commands
 
-from utils.logger import setup_logger
-from utils.db import init as init_db
+from utils.logger import logger
+from utils.db import db
 
-load_dotenv()
-
-TOKEN = os.getenv("DISCORD_TOKEN")
-LAVALINK_URI = os.getenv("LAVALINK_URI")
-LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
-
-# =====================================================
-# OPTIONAL DEV GUILD SYNC (UNCOMMENT FOR INSTANT SLASH UPDATES)
-# =====================================================
-# GUILD_ID = 123456789012345678  # <-- set this
+TOKEN = (os.getenv("DISCORD_TOKEN") or "").strip()
 
 
-# =====================================================
-# INTENTS
-# =====================================================
-intents = discord.Intents.default()
-intents.guilds = True
-intents.message_content = True
-intents.voice_states = True
-
-
-# =====================================================
-# BOT CLASS
-# =====================================================
 class Bot(commands.Bot):
     def __init__(self):
+        intents = discord.Intents.default()
+        intents.message_content = True
+        intents.members = True
+
         super().__init__(
             command_prefix="!",
             intents=intents,
-            help_command=None
+            help_command=None,
         )
-        self.logger = setup_logger()
 
-    # =====================================================
-    # SETUP HOOK
-    # =====================================================
+        self.logger = logger
+        self.db = db
+
     async def setup_hook(self):
-        print("\n[BOOT] setup_hook started")
+        self.logger.info("Loading cogs...")
 
-        if not TOKEN:
-            raise RuntimeError("Missing DISCORD_TOKEN")
+        loaded = 0
+        failed = 0
 
-        if not LAVALINK_URI or not LAVALINK_PASSWORD:
-            raise RuntimeError("Missing Lavalink config")
+        for file in os.listdir("./cogs"):
+            if not file.endswith(".py"):
+                continue
 
-        print("[BOOT] init db...")
-        await init_db()
+            if file.startswith("_"):
+                continue
 
-        print("[BOOT] connecting wavelink...")
+            if file == "config.py":
+                continue
 
-        try:
-            await wavelink.Pool.connect(
-                nodes=[
-                    wavelink.Node(
-                        uri=LAVALINK_URI,
-                        password=LAVALINK_PASSWORD
-                    )
-                ],
-                client=self
-            )
-            print("[BOOT] wavelink connected")
+            ext = f"cogs.{file[:-3]}"
 
-        except Exception as e:
-            print("[BOOT] WAVELINK FAILED:", e)
-            traceback.print_exc()
-
-        # =================================================
-        # LOAD COGS
-        # =================================================
-        extensions = [
-            "cogs.quotes",
-            "cogs.music",
-            "cogs.admin",
-            "cogs.dice",
-            "cogs.help",
-            "cogs.logger"
-        ]
-
-        print("[BOOT] loading cogs...")
-
-        for ext in extensions:
             try:
-                print(f"[BOOT] loading {ext}...")
                 await self.load_extension(ext)
-                print(f"[BOOT] LOADED: {ext}")
 
-            except Exception as e:
-                print(f"[BOOT] FAILED COG: {ext}")
-                traceback.print_exc()
+                loaded += 1
 
-        # =================================================
-        # DEBUG COMMAND TREE
-        # =================================================
-        print("\n[BOOT] COMMAND TREE BEFORE SYNC:")
+                self.logger.info(
+                    f"Loaded {ext}"
+                )
+
+            except Exception:
+                failed += 1
+
+                self.logger.exception(
+                    f"Failed to load {ext}"
+                )
+
+        self.logger.info(
+            f"Cogs loaded. Success={loaded} Failed={failed}"
+        )
+
+        self.logger.info(
+            "=== COMMAND TREE BEFORE SYNC ==="
+        )
 
         for cmd in self.tree.get_commands():
-            print(f" - /{cmd.name}")
-
-        # =================================================
-        # SLASH SYNC (FIXED)
-        # =================================================
-        print("\n[BOOT] syncing slash commands...")
+            self.logger.info(
+                f"/{cmd.name}"
+            )
 
         try:
-            # -------------------------------------------------
-            # FAST DEV MODE (recommended during development)
-            # -------------------------------------------------
-            # Uncomment this for instant updates:
-            #
-            # guild = discord.Object(id=GUILD_ID)
-            # synced = await self.tree.sync(guild=guild)
-
             synced = await self.tree.sync()
 
-            print(f"[BOOT] SLASH SYNC COMPLETE: {len(synced)} commands")
+            self.logger.info(
+                f"Synced {len(synced)} slash commands"
+            )
 
-            for c in synced:
-                print(f"   ↳ /{c.name}")
+            self.logger.info(
+                "=== COMMANDS RETURNED BY DISCORD ==="
+            )
 
-        except Exception as e:
-            print("[BOOT] SLASH SYNC FAILED:", e)
-            traceback.print_exc()
+            for cmd in synced:
+                self.logger.info(
+                    f"Registered /{cmd.name}"
+                )
 
-        await self.wait_until_ready()
+        except Exception:
+            self.logger.exception(
+                "Slash command sync failed"
+            )
 
-        print("[BOOT] setup_hook finished\n")
+    async def on_ready(self):
+        self.logger.info(
+            f"Logged in as {self.user} "
+            f"(ID: {self.user.id})"
+        )
 
-    # =====================================================
-    # MESSAGE PIPELINE
-    # =====================================================
-    async def on_message(self, message: discord.Message):
+        self.logger.info(
+            f"Application ID: {self.application_id}"
+        )
 
-        if message.author.bot:
-            return
-
-        print(f"[MESSAGE] {message.author}: {message.content}")
-
-        try:
-            await self.process_commands(message)
-
-        except commands.CommandNotFound:
-            pass
-
-        except Exception as e:
-            print("[COMMAND ERROR]", e)
-            traceback.print_exc()
-
-        try:
-            quotes = self.get_cog("Quotes")
-            if quotes:
-                await quotes.handle_raw_message(message)
-
-        except Exception as e:
-            print("[QUOTES ERROR]", e)
-            traceback.print_exc()
-
-    # =====================================================
-    # PREFIX DEBUG
-    # =====================================================
-    async def on_command(self, ctx):
-        print(f"[COMMAND] {ctx.command} by {ctx.author}")
-
-    async def on_command_error(self, ctx, error):
-
-        if isinstance(error, commands.CommandNotFound):
-            return
-
-        if isinstance(error, commands.HybridCommandError):
-            return
-
-        self.logger.error(f"ERROR: {error}")
-
-    # =====================================================
-    # SLASH ERROR HANDLER
-    # =====================================================
-    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-
-        if "CommandNotFound" in str(error):
-            return
-
-        self.logger.error(f"APP ERROR: {error}")
+        self.logger.info(
+            "Bot is ready."
+        )
 
 
-# =====================================================
-# RUN BOT
-# =====================================================
-if __name__ == "__main__":
-    print("[BOOT] starting bot...")
+def main():
+    if not TOKEN:
+        raise RuntimeError(
+            "Missing DISCORD_TOKEN"
+        )
+
     bot = Bot()
     bot.run(TOKEN)
+
+
+if __name__ == "__main__":
+    main()
