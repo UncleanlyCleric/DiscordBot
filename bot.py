@@ -54,7 +54,7 @@ class DiscordBot(commands.Bot):
         await db.connect()
 
         # =====================================================
-        # LAVALINK (FIXED: GUARANTEED READY NODE)
+        # LAVALINK
         # =====================================================
         logging.info("[LAVALINK] Connecting node...")
 
@@ -70,15 +70,13 @@ class DiscordBot(commands.Bot):
             nodes=nodes
         )
 
-        # -----------------------------------------------------
-        # FIX: WAIT FOR NODE TO ACTUALLY BE READY
-        # -----------------------------------------------------
+        # wait for node
         for _ in range(20):
             if wavelink.Pool.nodes:
                 break
             await asyncio.sleep(0.5)
         else:
-            raise RuntimeError("Lavalink node failed to connect (POOL EMPTY)")
+            raise RuntimeError("Lavalink node failed to connect")
 
         logging.info("[LAVALINK] Node is ready.")
 
@@ -95,7 +93,7 @@ class DiscordBot(commands.Bot):
                 logging.exception("[COG] Failed %s", cog)
 
         # =====================================================
-        # COMMAND SYNC
+        # SYNC
         # =====================================================
         try:
             synced = await self.tree.sync()
@@ -104,7 +102,7 @@ class DiscordBot(commands.Bot):
             logging.exception("[CMD] Sync failed")
 
         # =====================================================
-        # MUSIC RESTORE (SAFE DELAY)
+        # RESTORE MUSIC STATE
         # =====================================================
         logging.info("[MUSIC] Restoring state...")
 
@@ -143,28 +141,34 @@ class DiscordBot(commands.Bot):
         )
 
     # =====================================================
-    # SAFETY EVENT: LAVALINK GUARD
+    # LAVALINK READY
     # =====================================================
     async def on_wavelink_node_ready(self, payload):
         logging.info("[LAVALINK] Node fully ready: %s", payload.node.identifier)
 
     # =====================================================
-    # TRACK END
+    # TRACK END (FIXED)
     # =====================================================
     async def on_wavelink_track_end(self, payload):
+        """
+        DO NOT mutate state here anymore.
+        Controller handles queue progression.
+        """
 
         if not payload.player:
             return
 
-        if not payload.player.guild:
+        guild = getattr(payload.player, "guild", None)
+        if not guild:
             return
 
-        guild_id = payload.player.guild.id
-        player = music_manager.get_player(guild_id)
-        player.current = None
+        guild_id = guild.id
+
+        # Let controller decide next track
+        await music_controller.play_next(guild_id)
 
     # =====================================================
-    # CLEAN SHUTDOWN (SAFE ORDER)
+    # SHUTDOWN
     # =====================================================
     async def close(self):
         logging.info("[SHUTDOWN] Cleaning up bot...")

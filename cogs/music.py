@@ -8,7 +8,7 @@ from core.cog_base import BaseCog
 
 from services.music.manager import music_manager
 from services.music.resolver import music_resolver
-from services.music.runtime import music_runtime
+from services.music.controller import music_controller
 from services.music.lavalink.bridge import voice_bridge
 from ui.music_player import MusicPlayerView
 
@@ -66,7 +66,8 @@ class MusicCog(BaseCog):
         # queue tracks
         player.queue.add_many(tracks)
 
-        await music_runtime.start_guild(interaction.guild_id)
+        # IMPORTANT FIX: start controller loop (NOT runtime)
+        await music_controller.start_loop(interaction.guild_id)
 
         embed = discord.Embed(
             title="🎵 Added to Queue",
@@ -83,25 +84,31 @@ class MusicCog(BaseCog):
     # =====================================================
     @app_commands.command(name="skip", description="Skip current track")
     async def skip(self, interaction: discord.Interaction):
-        player = self.manager.get_player(interaction.guild_id)
+
+        vc = interaction.guild.voice_client
 
         try:
-            vc = interaction.guild.voice_client
             if vc:
                 await vc.stop()
         except Exception:
             pass
 
-        await player.skip()
-        await self.send_success(interaction, "⏭ Skipped")
+        player = self.manager.get_player(interaction.guild_id)
+
+        try:
+            await player.skip()
+        except Exception:
+            pass
+
+        await interaction.response.send_message("⏭ Skipped", ephemeral=True)
 
     # =====================================================
     # /QUEUE
     # =====================================================
     @app_commands.command(name="queue", description="Show queue")
     async def queue(self, interaction: discord.Interaction):
-        player = self.manager.get_player(interaction.guild_id)
 
+        player = self.manager.get_player(interaction.guild_id)
         tracks = player.queue.all()
 
         if not tracks:
@@ -125,6 +132,7 @@ class MusicCog(BaseCog):
     # =====================================================
     @app_commands.command(name="nowplaying", description="Current track")
     async def nowplaying(self, interaction: discord.Interaction):
+
         player = self.manager.get_player(interaction.guild_id)
 
         if not player.current:
@@ -140,7 +148,7 @@ class MusicCog(BaseCog):
         await interaction.response.send_message(embed=embed)
 
     # =====================================================
-    # /PAUSE (FIXED)
+    # /PAUSE (FIXED - REAL LAVALINK CONTROL)
     # =====================================================
     @app_commands.command(name="pause", description="Pause playback")
     async def pause(self, interaction: discord.Interaction):
@@ -152,12 +160,12 @@ class MusicCog(BaseCog):
             return
 
         try:
-            await vc.pause(True)
+            await vc.pause()
         except Exception as e:
             await self.send_error(interaction, f"Pause failed: {e}")
             return
 
-        await self.send_success(interaction, "⏸ Paused")
+        await interaction.response.send_message("⏸ Paused", ephemeral=True)
 
     # =====================================================
     # /RESUME (FIXED)
@@ -172,19 +180,19 @@ class MusicCog(BaseCog):
             return
 
         try:
-            await vc.pause(False)
+            await vc.resume()
         except Exception as e:
             await self.send_error(interaction, f"Resume failed: {e}")
             return
 
-        await self.send_success(interaction, "▶ Resumed")
+        await interaction.response.send_message("▶ Resumed", ephemeral=True)
 
     # =====================================================
     # /MUSIC_START
     # =====================================================
     @app_commands.command(name="music_start", description="Force start runtime")
     async def music_start(self, interaction: discord.Interaction):
-        await music_runtime.start_guild(interaction.guild_id)
+        await music_controller.start_loop(interaction.guild_id)
         await self.send_success(interaction, "Music loop started")
 
     # =====================================================
@@ -193,7 +201,7 @@ class MusicCog(BaseCog):
     @app_commands.command(name="music_stop", description="Stop music and disconnect")
     async def music_stop(self, interaction: discord.Interaction):
 
-        music_runtime.stop_guild(interaction.guild_id)
+        music_controller.stop_loop(interaction.guild_id)
 
         player = self.manager.get_player(interaction.guild_id)
         player.current = None
