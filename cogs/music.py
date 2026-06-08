@@ -15,14 +15,7 @@ class MusicCog(commands.Cog):
         self.bot = bot
 
     # =====================================================
-    # INTERNAL
-    # =====================================================
-    def get_player(self, guild: discord.Guild) -> wavelink.Player:
-        vc = guild.voice_client
-        return vc if isinstance(vc, wavelink.Player) else None
-
-    # =====================================================
-    # PLAY
+    # PLAY (ENGINE OWNED)
     # =====================================================
     @app_commands.command(name="play")
     async def play(self, interaction: discord.Interaction, query: str):
@@ -33,8 +26,8 @@ class MusicCog(commands.Cog):
             return await interaction.followup.send("Join a voice channel.")
 
         channel = interaction.user.voice.channel
-        player: wavelink.Player = interaction.guild.voice_client
 
+        player: wavelink.Player = interaction.guild.voice_client
         if not player:
             player = await channel.connect(cls=wavelink.Player)
 
@@ -43,15 +36,16 @@ class MusicCog(commands.Cog):
         if not tracks:
             return await interaction.followup.send("No results.")
 
-        state = music_manager.get_player(interaction.guild_id)
-        state.queue.add_many(tracks)
+        # only primary + optional queue
+        primary = tracks[0]
+        rest = tracks[1:5]
 
-        # 🚀 SINGLE SOURCE OF TRUTH
-        await engine.ensure_playing(interaction.guild)
+        await engine.enqueue(player, primary)
 
-        await interaction.followup.send(
-            f"Queued: {tracks[0].title}"
-        )
+        for t in rest:
+            await engine.enqueue(player, t)
+
+        await interaction.followup.send(f"🎵 Queued: **{primary.title}**")
 
     # =====================================================
     # STOP
@@ -59,45 +53,11 @@ class MusicCog(commands.Cog):
     @app_commands.command(name="stop")
     async def stop(self, interaction: discord.Interaction):
 
-        await engine.stop(interaction.guild)
+        player = interaction.guild.voice_client
+        if player:
+            await engine.stop(player)
 
-        await interaction.response.send_message("Stopped.", ephemeral=True)
-
-    # =====================================================
-    # PAUSE (Wavelink 4 correct)
-    # =====================================================
-    @app_commands.command(name="pause")
-    async def pause(self, interaction: discord.Interaction):
-
-        player = self.get_player(interaction.guild)
-
-        if not player:
-            return await interaction.response.send_message(
-                "Nothing playing.",
-                ephemeral=True
-            )
-
-        await player.pause(True)
-
-        await interaction.response.send_message("⏸ Paused", ephemeral=True)
-
-    # =====================================================
-    # RESUME (Wavelink 4 correct)
-    # =====================================================
-    @app_commands.command(name="resume")
-    async def resume(self, interaction: discord.Interaction):
-
-        player = self.get_player(interaction.guild)
-
-        if not player:
-            return await interaction.response.send_message(
-                "Nothing playing.",
-                ephemeral=True
-            )
-
-        await player.pause(False)
-
-        await interaction.response.send_message("▶ Resumed", ephemeral=True)
+        await interaction.response.send_message("Stopped", ephemeral=True)
 
     # =====================================================
     # SKIP
@@ -105,12 +65,35 @@ class MusicCog(commands.Cog):
     @app_commands.command(name="skip")
     async def skip(self, interaction: discord.Interaction):
 
-        player = self.get_player(interaction.guild)
-
+        player = interaction.guild.voice_client
         if player:
-            await player.stop()
+            await engine.skip(player)
 
-        await interaction.response.send_message("⏭ Skipped", ephemeral=True)
+        await interaction.response.send_message("Skipped", ephemeral=True)
+
+    # =====================================================
+    # PAUSE
+    # =====================================================
+    @app_commands.command(name="pause")
+    async def pause(self, interaction: discord.Interaction):
+
+        player = interaction.guild.voice_client
+        if player:
+            await player.pause(True)
+
+        await interaction.response.send_message("Paused", ephemeral=True)
+
+    # =====================================================
+    # RESUME
+    # =====================================================
+    @app_commands.command(name="resume")
+    async def resume(self, interaction: discord.Interaction):
+
+        player = interaction.guild.voice_client
+        if player:
+            await player.pause(False)
+
+        await interaction.response.send_message("Resumed", ephemeral=True)
 
     # =====================================================
     # QUEUE
@@ -119,21 +102,15 @@ class MusicCog(commands.Cog):
     async def queue(self, interaction: discord.Interaction):
 
         state = music_manager.get_player(interaction.guild_id)
+
         tracks = state.queue.all()
 
         if not tracks:
             return await interaction.response.send_message("Queue empty.")
 
-        msg = "\n".join(
-            f"{i+1}. {t.title}" for i, t in enumerate(tracks[:10])
-        )
+        msg = "\n".join(f"{i+1}. {t.title}" for i, t in enumerate(tracks[:10]))
 
-        await interaction.response.send_message(
-            embed=discord.Embed(
-                title="🎶 Queue",
-                description=msg
-            )
-        )
+        await interaction.response.send_message(msg)
 
 
 async def setup(bot: commands.Bot):
