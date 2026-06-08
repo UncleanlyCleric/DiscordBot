@@ -26,56 +26,30 @@ class MusicCog(BaseCog):
         return bool(wavelink.Pool.nodes)
 
     # =====================================================
-    # /PLAY (FIXED)
+    # /PLAY
     # =====================================================
-    @app_commands.command(
-        name="play",
-        description="Play a song or add to queue"
-    )
+    @app_commands.command(name="play", description="Play a song or add to queue")
     async def play(self, interaction: discord.Interaction, query: str):
 
         await self.ensure_guild(interaction.guild_id)
 
         player = self.manager.get_player(interaction.guild_id)
 
-        # -------------------------------------------------
-        # FIX 1: Lavalink readiness guard (CRITICAL)
-        # -------------------------------------------------
         if not self.lavalink_ready():
-            await self.send_error(
-                interaction,
-                "🎵 Music system is still starting. Try again in a few seconds."
-            )
+            await self.send_error(interaction, "🎵 Music system is still starting.")
             return
 
-        # -------------------------------------------------
-        # FIX 2: voice check
-        # -------------------------------------------------
         voice_state = interaction.user.voice
-
         if not voice_state or not voice_state.channel:
             await self.send_error(interaction, "Join a voice channel first.")
             return
 
-        # -------------------------------------------------
-        # FIX 3: SAFE voice connect (prevents node crash)
-        # -------------------------------------------------
         try:
-            await voice_bridge.connect(
-                interaction.guild,
-                voice_state.channel
-            )
+            await voice_bridge.connect(interaction.guild, voice_state.channel)
         except Exception as e:
-            await self.send_error(
-                interaction,
-                f"Failed to connect to voice: {e}"
-            )
+            await self.send_error(interaction, f"Failed to connect: {e}")
             return
 
-
-        # -------------------------------------------------
-        # FIX 5: resolve tracks safely
-        # -------------------------------------------------
         try:
             tracks = await music_resolver.resolve(
                 query=query,
@@ -89,19 +63,11 @@ class MusicCog(BaseCog):
             await self.send_error(interaction, "No results found.")
             return
 
-        # -------------------------------------------------
-        # FIX 6: queue handling
-        # -------------------------------------------------
-        for track in tracks:
-            await player.add_track(track)
+        # queue tracks
+        player.queue.add_many(tracks)
 
-        await music_runtime.start_guild(
-            interaction.guild_id
-        )
+        await music_runtime.start_guild(interaction.guild_id)
 
-        # -------------------------------------------------
-        # UI RESPONSE
-        # -------------------------------------------------
         embed = discord.Embed(
             title="🎵 Added to Queue",
             description=tracks[0].title,
@@ -110,10 +76,7 @@ class MusicCog(BaseCog):
 
         view = MusicPlayerView(self, interaction.guild_id)
 
-        await interaction.response.send_message(
-            embed=embed,
-            view=view
-        )
+        await interaction.response.send_message(embed=embed, view=view)
 
     # =====================================================
     # /SKIP
@@ -123,11 +86,14 @@ class MusicCog(BaseCog):
         player = self.manager.get_player(interaction.guild_id)
 
         try:
-            await player.skip()
+            vc = interaction.guild.voice_client
+            if vc:
+                await vc.stop()
         except Exception:
             pass
 
-        await self.send_success(interaction, "Skipped track")
+        await player.skip()
+        await self.send_success(interaction, "⏭ Skipped")
 
     # =====================================================
     # /QUEUE
@@ -174,59 +140,74 @@ class MusicCog(BaseCog):
         await interaction.response.send_message(embed=embed)
 
     # =====================================================
-    # /PAUSE
+    # /PAUSE (FIXED)
     # =====================================================
     @app_commands.command(name="pause", description="Pause playback")
     async def pause(self, interaction: discord.Interaction):
-        player = self.manager.get_player(interaction.guild_id)
+
+        vc = interaction.guild.voice_client
+
+        if not vc:
+            await self.send_error(interaction, "Nothing is playing.")
+            return
 
         try:
-            player.is_playing = False
-        except Exception:
-            pass
+            await vc.pause(True)
+        except Exception as e:
+            await self.send_error(interaction, f"Pause failed: {e}")
+            return
 
-        await self.send_success(interaction, "Paused")
+        await self.send_success(interaction, "⏸ Paused")
 
     # =====================================================
-    # /RESUME
+    # /RESUME (FIXED)
     # =====================================================
     @app_commands.command(name="resume", description="Resume playback")
     async def resume(self, interaction: discord.Interaction):
-        player = self.manager.get_player(interaction.guild_id)
+
+        vc = interaction.guild.voice_client
+
+        if not vc:
+            await self.send_error(interaction, "Nothing is playing.")
+            return
 
         try:
-            player.is_playing = True
-        except Exception:
-            pass
+            await vc.pause(False)
+        except Exception as e:
+            await self.send_error(interaction, f"Resume failed: {e}")
+            return
 
-        await self.send_success(interaction, "Resumed")
+        await self.send_success(interaction, "▶ Resumed")
 
     # =====================================================
-    # DEBUG / CONTROL
+    # /MUSIC_START
     # =====================================================
     @app_commands.command(name="music_start", description="Force start runtime")
     async def music_start(self, interaction: discord.Interaction):
         await music_runtime.start_guild(interaction.guild_id)
         await self.send_success(interaction, "Music loop started")
 
-    @app_commands.command(
-        name="music_stop", description="Stop music and disconnect")
+    # =====================================================
+    # /MUSIC_STOP (FIXED CLEANLY)
+    # =====================================================
+    @app_commands.command(name="music_stop", description="Stop music and disconnect")
     async def music_stop(self, interaction: discord.Interaction):
-        music_runtime.stop_guild(interaction.guild_id)
-        player = self.manager.get_player(
-            interaction.guild_id
-        )
 
-        await player.clear()
+        music_runtime.stop_guild(interaction.guild_id)
+
+        player = self.manager.get_player(interaction.guild_id)
+        player.current = None
+        player.queue.clear()
 
         vc = interaction.guild.voice_client
         if vc:
-            await vc.disconnect()
+            try:
+                await vc.stop()
+                await vc.disconnect()
+            except Exception:
+                pass
 
-        await self.send_success(
-            interaction,
-            "Stopped music and disconnected."
-        )
+        await self.send_success(interaction, "🛑 Stopped music and disconnected")
 
 
 async def setup(bot: commands.Bot):

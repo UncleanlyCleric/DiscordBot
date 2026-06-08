@@ -14,7 +14,7 @@ class Track:
 @dataclass
 class PlayerState:
     guild_id: int
-    is_playing: bool = False
+    paused: bool = False
     volume: int = 75
     repeat_mode: str = "off"  # off | track | queue
     shuffle: bool = False
