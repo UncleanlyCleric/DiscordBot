@@ -52,7 +52,7 @@ class DiscordBot(commands.Bot):
         await db.connect()
 
         # =====================================================
-        # LAVALINK NODE
+        # LAVALINK NODE (Wavelink 4 SAFE CONNECT)
         # =====================================================
         logging.info("[LAVALINK] Connecting node...")
 
@@ -68,7 +68,7 @@ class DiscordBot(commands.Bot):
             nodes=nodes
         )
 
-        # wait for node readiness
+        # wait until pool is actually usable
         for _ in range(20):
             if wavelink.Pool.nodes:
                 break
@@ -100,7 +100,7 @@ class DiscordBot(commands.Bot):
             logging.exception("[CMD] Sync failed")
 
         # =====================================================
-        # RESTORE MUSIC STATE
+        # MUSIC RESTORE (STATE ONLY)
         # =====================================================
         logging.info("[MUSIC] Restoring state...")
 
@@ -108,8 +108,9 @@ class DiscordBot(commands.Bot):
 
         for player in music_manager.get_all():
             try:
-                # Only restore queue state, NOT playback
+                # ONLY restore queue, NOT playback
                 tracks = player.queue.all()
+                player.queue.clear()
                 for t in tracks:
                     player.queue.add(t)
             except Exception:
@@ -122,7 +123,7 @@ class DiscordBot(commands.Bot):
         logging.info("[READY] Logged in as %s (%s)", self.user, self.user.id)
 
     # =====================================================
-    # AUDIT LOGGING
+    # AUDIT
     # =====================================================
     async def on_app_command_completion(self, interaction, command):
         audit.command_called(
@@ -144,12 +145,14 @@ class DiscordBot(commands.Bot):
         logging.info("[LAVALINK] Node fully ready: %s", payload.node.identifier)
 
     # =====================================================
-    # TRACK END (PRODUCTION SAFE)
+    # TRACK END (SAFE STATE ONLY)
     # =====================================================
     async def on_wavelink_track_end(self, payload):
         """
-        Only update state here.
-        DO NOT control playback (Wavelink or cog handles it).
+        Production-safe:
+        - DO NOT start playback here
+        - DO NOT modify queues
+        - ONLY clear state
         """
 
         player = payload.player
@@ -162,7 +165,6 @@ class DiscordBot(commands.Bot):
 
         state = music_manager.get_player(guild.id)
 
-        # clear current track safely
         state.current = None
 
     # =====================================================
