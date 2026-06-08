@@ -72,14 +72,6 @@ class MusicCog(BaseCog):
             )
             return
 
-        # -------------------------------------------------
-        # FIX 4: ensure runtime is safe (non-blocking)
-        # -------------------------------------------------
-        try:
-            await music_runtime.start_guild(interaction.guild_id)
-        except Exception:
-            # don't crash music if runtime fails
-            pass
 
         # -------------------------------------------------
         # FIX 5: resolve tracks safely
@@ -101,15 +93,11 @@ class MusicCog(BaseCog):
         # FIX 6: queue handling
         # -------------------------------------------------
         for track in tracks:
-            player.queue.add(track)
+            await player.add_track(track)
 
-        # start playback if idle
-        try:
-            if not player.is_playing:
-                await player.start()
-        except Exception:
-            # prevents queue insert from crashing play
-            pass
+        await music_runtime.start_guild(
+            interaction.guild_id
+        )
 
         # -------------------------------------------------
         # UI RESPONSE

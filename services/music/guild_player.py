@@ -49,10 +49,10 @@ class GuildPlayer:
 
     async def start(self):
         async with self.lock:
-            if self.is_playing:
-                return
+            if self.current:
+                return self.current
 
-            await self._next_track()
+            return await self._next_track()
 
     async def _next_track(self):
         self.current = self.queue.next()

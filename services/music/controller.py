@@ -100,29 +100,48 @@ class MusicController:
                 player.is_playing = True
 
                 # -------------------------
+                # FIND GUILD
+                # -------------------------
+                guild = None
+
+                for node in wavelink.Pool.nodes.values():
+                    bot = getattr(node, "_client", None)
+
+                    if bot:
+                        guild = bot.get_guild(guild_id)
+
+                    if guild:
+                        break
+
+                if not guild:
+                    await asyncio.sleep(2)
+                    continue
+
+                # -------------------------
                 # PLAY VIA LAVALINK
                 # -------------------------
-                await voice_bridge.play(guild_id, track)
+                played = await voice_bridge.play(
+                    guild,
+                    track
+                )
+
+                if not played:
+                    await asyncio.sleep(2)
+                    continue
 
                 # -------------------------
                 # WAIT FOR TRACK TO FINISH
                 # -------------------------
-                guild = next(
-                    (g for g in wavelink.Pool._bot.guilds if g.id == guild_id),
-                    None
-                )
+                vc = guild.voice_client
 
-                if guild and guild.voice_client:
-                    vc: wavelink.Player = guild.voice_client
-
-                    # Wait until Lavalink reports idle
+                if vc:
                     while vc.playing or vc.paused:
                         await asyncio.sleep(1)
 
                 # -------------------------
                 # ADVANCE QUEUE
                 # -------------------------
-                player.skip()
+                await player.skip()
 
         except asyncio.CancelledError:
             pass

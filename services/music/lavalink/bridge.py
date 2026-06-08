@@ -6,44 +6,53 @@ from services.music.models import Track
 
 class VoiceBridge:
     """
-    Real audio bridge using Wavelink player.
+    Wavelink/Lavalink bridge.
     """
 
-    async def connect(self, channel):
-        # =====================================================
-        # FIX: ENSURE NODE EXISTS BEFORE CONNECT
-        # =====================================================
+    async def connect(
+        self,
+        guild: discord.Guild,
+        channel: discord.VoiceChannel,
+    ):
         if not wavelink.Pool.nodes:
-            raise RuntimeError("Lavalink is not ready (no active nodes)")
+            raise RuntimeError(
+                "Lavalink is not ready (no active nodes)"
+            )
 
-        return await channel.connect(cls=wavelink.Player)
+        voice_client = guild.voice_client
 
-    async def connect(self, guild: discord.Guild, channel: discord.VoiceChannel):
+        if voice_client:
+            if voice_client.channel != channel:
+                await voice_client.move_to(channel)
+
+            return voice_client
+
+        return await channel.connect(
+            cls=wavelink.Player
+        )
+
+    async def play(
+        self,
+        guild: discord.Guild,
+        track: Track,
+    ) -> bool:
         player: wavelink.Player = guild.voice_client
 
-        if player and player.is_connected():
-            return player
-
-        return await channel.connect(cls=wavelink.Player)
-
-    async def play(self, guild_id: int, track: Track):
-        guild = discord.utils.get(wavelink.Pool._bot.guilds, id=guild_id)
-        if not guild:
-            return
-
-        player: wavelink.Player = guild.voice_client
         if not player:
-            return
+            return False
 
-        # resolve track via Lavalink
-        results = await wavelink.Playable.search(track.uri)
+        results = await wavelink.Playable.search(
+            track.uri
+        )
 
         if not results:
-            return
+            return False
 
         playable = results[0]
 
         await player.play(playable)
+
+        return True
 
 
 voice_bridge = VoiceBridge()
