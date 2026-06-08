@@ -33,51 +33,51 @@ class MusicController:
 
     async def _run(self, guild_id: int):
 
-        player = music_manager.get_player(guild_id)
+        player_state = music_manager.get_player(guild_id)
 
         try:
             while self.running.get(guild_id):
 
-                vc = player.guild.voice_client if player.guild else None
+                vc = player_state.guild.voice_client if player_state.guild else None
 
+                # MUST be wavelink.Player
                 if not vc or not isinstance(vc, wavelink.Player):
                     await asyncio.sleep(1)
                     continue
 
-                track = player.queue.next()
+                track = player_state.queue.next()
 
                 if not track:
                     await asyncio.sleep(1)
                     continue
 
-                player.current = track
+                # set now playing
+                player_state.current = track
 
                 print(f"[MUSIC] Now playing: {track.title}")
 
-                try:
-                    results = await wavelink.Playable.search(track.uri)
+                # 🔥 PRIMARY FIX: use stored Playable
+                playable = getattr(track, "_wavelink_track", None)
 
+                # fallback ONLY if missing
+                if playable is None:
+                    results = await wavelink.Playable.search(track.uri)
                     if not results:
                         continue
-
                     playable = results[0]
 
+                # 🔥 ACTUAL PLAYBACK
+                try:
                     await vc.play(playable)
-
                 except Exception as e:
-                    print(f"[MUSIC] Play error: {e}")
+                    print(f"[MUSIC] Playback error: {e}")
                     continue
 
+                # wait until finished
                 while vc.playing or vc.paused:
                     await asyncio.sleep(1)
 
-                player.current = None
+                player_state.current = None
 
         except asyncio.CancelledError:
             pass
-
-
-# =====================================================
-# 🔥 THIS LINE WAS MISSING (CAUSE OF YOUR CRASH)
-# =====================================================
-music_controller = MusicController()
