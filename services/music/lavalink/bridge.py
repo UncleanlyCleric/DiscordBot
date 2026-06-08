@@ -5,51 +5,33 @@ from services.music.models import Track
 
 
 class VoiceBridge:
-    """
-    Wavelink/Lavalink bridge.
-    """
 
-    async def connect(
-        self,
-        guild: discord.Guild,
-        channel: discord.VoiceChannel,
-    ):
+    async def connect(self, guild: discord.Guild, channel: discord.VoiceChannel):
         if not wavelink.Pool.nodes:
-            raise RuntimeError("Lavalink is not ready (no active nodes)")
+            raise RuntimeError("Lavalink is not ready")
 
-        voice_client = guild.voice_client
-
-        if voice_client:
-            if voice_client.channel != channel:
-                await voice_client.move_to(channel)
-            return voice_client
+        if guild.voice_client:
+            if guild.voice_client.channel != channel:
+                await guild.voice_client.move_to(channel)
+            return guild.voice_client
 
         return await channel.connect(cls=wavelink.Player)
 
-    # =====================================================
-    # FIXED PLAY LOGIC
-    # =====================================================
     async def play(self, guild: discord.Guild, track: Track) -> bool:
         player: wavelink.Player = guild.voice_client
 
         if not player:
             return False
 
+        # 🚨 KEY FIX: DO NOT re-search here
+        # The resolver ALREADY decided what this is
         query = track.uri
 
-        # -------------------------------------------------
-        # FIX 1: normalize search prefixes
-        # -------------------------------------------------
-        if not query.startswith(("http", "ytmsearch:", "scsearch:")):
-            query = f"ytmsearch:{query}"
-
-        # -------------------------------------------------
-        # FIX 2: search Lavalink safely
-        # -------------------------------------------------
         try:
+            # Let wavelink fully resolve properly
             results = await wavelink.Playable.search(query)
         except Exception as e:
-            print(f"[VoiceBridge] search failed: {e}")
+            print(f"[VoiceBridge] search error: {e}")
             return False
 
         if not results:
@@ -57,23 +39,29 @@ class VoiceBridge:
 
         playable = results[0]
 
-        # -------------------------------------------------
-        # FIX 3: guard against null encoding (YOUR BUG)
-        # -------------------------------------------------
-        if not getattr(playable, "encoded", None) and not getattr(playable, "identifier", None):
-            print("[VoiceBridge] invalid playable received")
+        # 🚨 CRITICAL FIX: ensure proper encoding exists
+        if not getattr(playable, "encoded", None):
+            try:
+                playable = await wavelink.Playable.search(f"ytsearch:{track.title}")
+                playable = playable[0] if playable else None
+            except Exception:
+                return False
+
+        if not playable:
             return False
 
-        # -------------------------------------------------
-        # FIX 4: play safely
-        # -------------------------------------------------
         try:
+            # 🚨 IMPORTANT: stop current before playing new track
+            if player.playing or player.paused:
+                await player.stop()
+
             await player.play(playable)
+
+            return True
+
         except Exception as e:
             print(f"[VoiceBridge] play failed: {e}")
             return False
-
-        return True
 
 
 voice_bridge = VoiceBridge()
