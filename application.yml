@@ -1,0 +1,18 @@
+database:
+  path: "storage/bot.db"
+
+logging:
+  level: "INFO"
+
+music:
+  default_volume: 75
+  autoplay_default: true
+  twenty_four_seven_default: false
+  idle_disconnect_minutes: 10
+
+markov:
+  enabled: true
+  default_chance: 0.5
+  default_cooldown_minutes: 15
+  min_words: 3
+  max_words: 30

@@ -1,0 +1,12 @@
+.env
+
+__pycache__/
+*.pyc
+
+storage/logs/*
+storage/bot.db
+
+.vscode/
+.idea/
+
+.DS_Store
