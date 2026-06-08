@@ -20,15 +20,9 @@ from services.music.runtime import music_runtime
 from services.music.controller import music_controller
 
 
-# =====================================================
-# SAFETY: ensure module imports work in Docker/local
-# =====================================================
 sys.path.append(str(Path(__file__).resolve().parent))
 
 
-# =====================================================
-# ACTIVE COGS ONLY (FIXED)
-# =====================================================
 COGS = [
     "cogs.quotes",
     "cogs.dice",
@@ -50,7 +44,7 @@ class DiscordBot(commands.Bot):
         )
 
     # =====================================================
-    # BOOT SEQUENCE
+    # BOOT
     # =====================================================
     async def setup_hook(self):
         logging.info("[BOOT] Running migrations...")
@@ -59,9 +53,9 @@ class DiscordBot(commands.Bot):
         logging.info("[BOOT] Connecting DB...")
         await db.connect()
 
-        # -------------------------
-        # LAVALINK
-        # -------------------------
+        # =====================================================
+        # LAVALINK (FIXED: GUARANTEED READY NODE)
+        # =====================================================
         logging.info("[LAVALINK] Connecting node...")
 
         nodes = [
@@ -76,34 +70,45 @@ class DiscordBot(commands.Bot):
             nodes=nodes
         )
 
-        # -------------------------
-        # COG LOAD
-        # -------------------------
+        # -----------------------------------------------------
+        # FIX: WAIT FOR NODE TO ACTUALLY BE READY
+        # -----------------------------------------------------
+        for _ in range(20):
+            if wavelink.Pool.nodes:
+                break
+            await asyncio.sleep(0.5)
+        else:
+            raise RuntimeError("Lavalink node failed to connect (POOL EMPTY)")
+
+        logging.info("[LAVALINK] Node is ready.")
+
+        # =====================================================
+        # COGS
+        # =====================================================
         for cog in COGS:
             try:
                 await self.load_extension(cog)
                 audit.cog_loaded(cog)
                 logging.info("[COG] Loaded %s", cog)
-
             except Exception as e:
                 audit.cog_failed(cog, e)
                 logging.exception("[COG] Failed %s", cog)
 
-        # -------------------------
-        # SYNC COMMANDS
-        # -------------------------
+        # =====================================================
+        # COMMAND SYNC
+        # =====================================================
         try:
             synced = await self.tree.sync()
             logging.info("[CMD] Synced %s commands", len(synced))
         except Exception:
             logging.exception("[CMD] Sync failed")
 
-        # -------------------------
-        # MUSIC RESTORE
-        # -------------------------
+        # =====================================================
+        # MUSIC RESTORE (SAFE DELAY)
+        # =====================================================
         logging.info("[MUSIC] Restoring state...")
 
-        await asyncio.sleep(1)  # allow wavelink + gateway to stabilize
+        await asyncio.sleep(1)
 
         for player in music_manager.get_all():
             try:
@@ -116,58 +121,60 @@ class DiscordBot(commands.Bot):
         await music_runtime.restart_all()
 
     # =====================================================
-    # READY EVENT
+    # READY
     # =====================================================
     async def on_ready(self):
         logging.info("[READY] Logged in as %s (%s)", self.user, self.user.id)
 
     # =====================================================
-    # COMMAND AUDIT LOGGING
+    # COMMAND AUDIT
     # =====================================================
-    async def on_app_command_completion(self, interaction: discord.Interaction, command):
+    async def on_app_command_completion(self, interaction, command):
         audit.command_called(
             user_id=interaction.user.id,
             guild_id=interaction.guild_id or 0,
             command=command.qualified_name
         )
 
-    async def on_app_command_error(self, interaction: discord.Interaction, error: Exception):
+    async def on_app_command_error(self, interaction, error: Exception):
         audit.command_failed(
             command=getattr(interaction.command, "qualified_name", "unknown"),
             error=error
         )
 
     # =====================================================
-    # LAVALINK EVENTS
+    # SAFETY EVENT: LAVALINK GUARD
     # =====================================================
-    async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload):
+    async def on_wavelink_node_ready(self, payload):
+        logging.info("[LAVALINK] Node fully ready: %s", payload.node.identifier)
+
+    # =====================================================
+    # TRACK END
+    # =====================================================
+    async def on_wavelink_track_end(self, payload):
         guild_id = payload.player.guild.id
         player = music_manager.get_player(guild_id)
         player.skip()
 
     # =====================================================
-    # CLEAN SHUTDOWN (FIXED ORDER)
+    # CLEAN SHUTDOWN (SAFE ORDER)
     # =====================================================
     async def close(self):
         logging.info("[SHUTDOWN] Cleaning up bot...")
 
-        # 1. stop music loops
         for player in music_manager.get_all():
             music_controller.stop_loop(player.guild_id)
 
-        # 2. stop runtime systems
         try:
             await music_runtime.shutdown()
         except Exception:
             pass
 
-        # 3. disconnect Lavalink BEFORE Discord session closes
         try:
             await wavelink.Pool.disconnect()
         except Exception:
             pass
 
-        # 4. close database
         try:
             await db.close()
         except Exception:
@@ -176,9 +183,6 @@ class DiscordBot(commands.Bot):
         await super().close()
 
 
-# =====================================================
-# ENTRYPOINT
-# =====================================================
 async def main():
     setup_logging()
 

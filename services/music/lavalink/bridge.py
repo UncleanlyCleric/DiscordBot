@@ -9,6 +9,15 @@ class VoiceBridge:
     Real audio bridge using Wavelink player.
     """
 
+    async def connect(self, channel):
+        # =====================================================
+        # FIX: ENSURE NODE EXISTS BEFORE CONNECT
+        # =====================================================
+        if not wavelink.Pool.nodes:
+            raise RuntimeError("Lavalink is not ready (no active nodes)")
+
+        return await channel.connect(cls=wavelink.Player)
+
     async def connect(self, guild: discord.Guild, channel: discord.VoiceChannel):
         player: wavelink.Player = guild.voice_client
 
