@@ -209,10 +209,24 @@ class MusicCog(BaseCog):
         await music_runtime.start_guild(interaction.guild_id)
         await self.send_success(interaction, "Music loop started")
 
-    @app_commands.command(name="music_stop", description="Stop runtime")
+    @app_commands.command(
+        name="music_stop", description="Stop music and disconnect")
     async def music_stop(self, interaction: discord.Interaction):
         music_runtime.stop_guild(interaction.guild_id)
-        await self.send_success(interaction, "Music loop stopped")
+        player = self.manager.get_player(
+            interaction.guild_id
+        )
+
+        await player.clear()
+
+        vc = interaction.guild.voice_client
+        if vc:
+            await vc.disconnect()
+
+        await self.send_success(
+            interaction,
+            "Stopped music and disconnected."
+        )
 
 
 async def setup(bot: commands.Bot):

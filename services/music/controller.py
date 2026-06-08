@@ -99,6 +99,10 @@ class MusicController:
                 player.current = track
                 player.is_playing = True
 
+                print(f"[MUSIC] Now playing: {track.title}")
+
+                played = await voice_bridge.play(guild, track)
+
                 # -------------------------
                 # FIND GUILD
                 # -------------------------
