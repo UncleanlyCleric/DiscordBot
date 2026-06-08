@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import sys
+from pathlib import Path
 
 import discord
 from discord.ext import commands
@@ -18,9 +20,16 @@ from services.music.runtime import music_runtime
 from services.music.controller import music_controller
 
 
+# =====================================================
+# SAFETY: ensure module imports work in Docker/local
+# =====================================================
+sys.path.append(str(Path(__file__).resolve().parent))
+
+
+# =====================================================
+# ACTIVE COGS ONLY (FIXED)
+# =====================================================
 COGS = [
-    "cogs.admin",
-    "cogs.help",
     "cogs.quotes",
     "cogs.dice",
     "cogs.markov",
@@ -41,9 +50,8 @@ class DiscordBot(commands.Bot):
         )
 
     # =====================================================
-    # BOOT
+    # BOOT SEQUENCE
     # =====================================================
-
     async def setup_hook(self):
         logging.info("[BOOT] Running migrations...")
         await migration_runner.run()
@@ -69,19 +77,20 @@ class DiscordBot(commands.Bot):
         )
 
         # -------------------------
-        # COGS
+        # COG LOAD
         # -------------------------
         for cog in COGS:
             try:
                 await self.load_extension(cog)
                 audit.cog_loaded(cog)
                 logging.info("[COG] Loaded %s", cog)
+
             except Exception as e:
                 audit.cog_failed(cog, e)
                 logging.exception("[COG] Failed %s", cog)
 
         # -------------------------
-        # SYNC
+        # SYNC COMMANDS
         # -------------------------
         try:
             synced = await self.tree.sync()
@@ -90,9 +99,11 @@ class DiscordBot(commands.Bot):
             logging.exception("[CMD] Sync failed")
 
         # -------------------------
-        # RESTORE MUSIC
+        # MUSIC RESTORE
         # -------------------------
         logging.info("[MUSIC] Restoring state...")
+
+        await asyncio.sleep(1)  # allow wavelink + gateway to stabilize
 
         for player in music_manager.get_all():
             try:
@@ -105,16 +116,14 @@ class DiscordBot(commands.Bot):
         await music_runtime.restart_all()
 
     # =====================================================
-    # READY
+    # READY EVENT
     # =====================================================
-
     async def on_ready(self):
         logging.info("[READY] Logged in as %s (%s)", self.user, self.user.id)
 
     # =====================================================
-    # COMMAND AUDIT
+    # COMMAND AUDIT LOGGING
     # =====================================================
-
     async def on_app_command_completion(self, interaction: discord.Interaction, command):
         audit.command_called(
             user_id=interaction.user.id,
@@ -131,36 +140,34 @@ class DiscordBot(commands.Bot):
     # =====================================================
     # LAVALINK EVENTS
     # =====================================================
-
     async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload):
         guild_id = payload.player.guild.id
         player = music_manager.get_player(guild_id)
         player.skip()
 
     # =====================================================
-    # CLEAN SHUTDOWN (FIXED)
+    # CLEAN SHUTDOWN (FIXED ORDER)
     # =====================================================
-
     async def close(self):
         logging.info("[SHUTDOWN] Cleaning up bot...")
 
-        # stop music loops
+        # 1. stop music loops
         for player in music_manager.get_all():
             music_controller.stop_loop(player.guild_id)
 
-        # stop runtime loops
+        # 2. stop runtime systems
         try:
             await music_runtime.shutdown()
         except Exception:
             pass
 
-        # disconnect lavalink (IMPORTANT FIX)
+        # 3. disconnect Lavalink BEFORE Discord session closes
         try:
             await wavelink.Pool.disconnect()
         except Exception:
             pass
 
-        # close DB
+        # 4. close database
         try:
             await db.close()
         except Exception:
@@ -169,6 +176,9 @@ class DiscordBot(commands.Bot):
         await super().close()
 
 
+# =====================================================
+# ENTRYPOINT
+# =====================================================
 async def main():
     setup_logging()
 
