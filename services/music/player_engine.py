@@ -149,34 +149,19 @@ class MusicEngine:
     async def handle_track_end(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
-        # skip guard prevents double trigger from skip()
         if guild_id in self._skip_guard:
             self._skip_guard.discard(guild_id)
-            return
 
         await self._play_next(player)
 
     # =====================================================
-    # SKIP (SAFE + FALLBACK)
+    # SKIP
     # =====================================================
     async def skip(self, player: wavelink.Player):
-        guild_id = self._guild_id(player)
-
-        self._skip_guard.add(guild_id)
-
         try:
             await player.stop()
         except Exception:
             pass
-
-        # fallback: if track_end doesn't fire, still continue queue
-        async def fallback():
-            await asyncio.sleep(self.SKIP_FALLBACK_TIMEOUT)
-            if guild_id in self._skip_guard:
-                self._skip_guard.discard(guild_id)
-                await self._play_next(player)
-
-        asyncio.create_task(fallback())
 
     # =====================================================
     # STOP
