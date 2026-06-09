@@ -8,11 +8,47 @@ from services.music.resolver import music_resolver
 from services.music.manager import music_manager
 from services.music.player_engine import engine
 
+# OPTIONAL UI (safe import)
+try:
+    from ui.music_player_view import MusicPlayerView
+    from ui.music_player_view import progress_bar
+except Exception:
+    MusicPlayerView = None
+
+
+def build_now_playing(track, requester_id: int):
+    embed = discord.Embed(
+        title="🎧 Now Playing",
+        description=f"**{track.title}**",
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="Author",
+        value=getattr(track, "author", "Unknown"),
+        inline=True
+    )
+
+    embed.add_field(
+        name="Requested by",
+        value=f"<@{requester_id}>",
+        inline=True
+    )
+
+    embed.add_field(
+        name="Source",
+        value=track.uri or "Unknown",
+        inline=False
+    )
+
+    return embed
+
 
 class MusicCog(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.now_playing_message = {}  # guild_id -> message
 
     # =====================================================
     # INTERNAL: SAFE PLAYER GET
@@ -35,15 +71,12 @@ class MusicCog(commands.Cog):
         return player
 
     # =====================================================
-    # PLAY (ENGINE CONTROLLED)
+    # PLAY
     # =====================================================
     @app_commands.command(name="play")
     async def play(self, interaction: discord.Interaction, query: str):
 
         await interaction.response.defer()
-
-        if not interaction.guild:
-            return await interaction.followup.send("Guild only command.")
 
         player = await self._get_player(interaction)
 
@@ -57,16 +90,27 @@ class MusicCog(commands.Cog):
 
         primary = tracks[0]
 
-        # =====================================================
-        # ENGINE OWNED FLOW
-        # =====================================================
         await engine.enqueue(player, primary)
 
-        # optional light prefetch (NO playback spam)
+        # prefetch
         for t in tracks[1:3]:
             await engine.enqueue(player, t)
 
-        await interaction.followup.send(f"🎵 Queued: **{primary.title}**")
+        # =====================================================
+        # UI: NOW PLAYING
+        # =====================================================
+        embed = build_now_playing(primary, interaction.user.id)
+
+        view = None
+        if MusicPlayerView:
+            view = MusicPlayerView(self.bot, interaction.guild.id)
+
+        msg = await interaction.followup.send(
+            embed=embed,
+            view=view
+        )
+
+        self.now_playing_message[interaction.guild.id] = msg
 
     # =====================================================
     # STOP
@@ -83,6 +127,9 @@ class MusicCog(commands.Cog):
                 await player.disconnect()
             except Exception:
                 pass
+
+        # clear UI
+        self.now_playing_message.pop(interaction.guild_id, None)
 
         await interaction.response.send_message("🛑 Stopped", ephemeral=True)
 
@@ -132,7 +179,7 @@ class MusicCog(commands.Cog):
         await interaction.response.send_message("▶ Resumed", ephemeral=True)
 
     # =====================================================
-    # QUEUE (READ ONLY SAFE)
+    # QUEUE
     # =====================================================
     @app_commands.command(name="queue")
     async def queue(self, interaction: discord.Interaction):
@@ -150,7 +197,3 @@ class MusicCog(commands.Cog):
         )
 
         await interaction.response.send_message(msg)
-
-
-async def setup(bot: commands.Bot):
-    await bot.add_cog(MusicCog(bot))
