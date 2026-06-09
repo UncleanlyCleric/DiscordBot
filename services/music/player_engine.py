@@ -151,6 +151,26 @@ class MusicEngine:
                 await self._play_next(player)
 
     # =====================================================
+    # ENQUEUE
+    # =====================================================
+    async def enqueue(self, player: wavelink.Player, track):
+        """
+        Public API for queue insertion.
+
+        Does NOT start playback directly unless idle.
+        """
+        guild_id = self._guild_id(player)
+
+        state = music_manager.get_player(guild_id)
+        state.queue.add(track)
+
+        self._cancel_idle(guild_id)
+
+        # Only trigger playback if nothing is currently playing
+        if not state.current:
+            await self._play_next(player)
+
+    # =====================================================
     # SKIP
     # =====================================================
     async def skip(self, player: wavelink.Player):
