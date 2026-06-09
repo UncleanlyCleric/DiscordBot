@@ -87,9 +87,15 @@ class MusicEngine:
 
             state = music_manager.get_player(guild.id)
 
+            # 🔥 ALWAYS refresh state first
             if not state.player_channel_id:
                 return
 
+            channel = guild.get_channel(state.player_channel_id)
+            if not channel:
+                return
+
+            # IMPORTANT: ensure message manager owns refresh logic
             from services.music.player_message_manager import player_message_manager
 
             await player_message_manager.update(guild)
@@ -107,8 +113,8 @@ class MusicEngine:
 
         self._cancel_idle(guild_id)
 
-        if not state.current:
-            await self._play_next(player)
+        # NO auto-play here anymore
+        # Playback is now fully controlled externally
 
     # =====================================================
     # CORE PLAYBACK

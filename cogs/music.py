@@ -76,19 +76,24 @@ class MusicCog(commands.Cog):
 
         primary = tracks[0]
 
-        await engine.enqueue(
-            player,
-            primary
-        )
+        # =====================================================
+        # ENGINE OWNED FLOW
+        # =====================================================
+        await engine.enqueue(player, primary)
+
+        # add extras directly to queue (no engine side effects)
+        state = music_manager.get_player(interaction.guild_id)
 
         for t in tracks[1:3]:
-            await engine.enqueue(
-                player,
-                t
-            )
+            state.queue.add(t)
 
+        # ensure playback starts ONLY once
+        await engine.start(player)
+
+        # UI update (engine will also trigger, but this ensures instant feedback)
         await player_message_manager.update(
             interaction.guild,
+            interaction.channel
         )
 
         await interaction.followup.send(
