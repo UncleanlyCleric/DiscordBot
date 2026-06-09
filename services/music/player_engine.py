@@ -230,9 +230,9 @@ class MusicEngine:
                 print(f"[ENGINE] play error: {e}")
 
 #                try:
-                    state.current = None
+#                    state.current = None
 #                except Exception:
-                    pass
+#                    pass
 
 
 
