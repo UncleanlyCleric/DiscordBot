@@ -3,15 +3,18 @@ import time
 import wavelink
 
 from services.music.manager import music_manager
+from services.music.player_message_manager import player_message_manager
 
 
 class MusicEngine:
     """
-    Phase 10.2 Live UI Engine
+    Stage 3.5 Engine (FULL OWNERSHIP MODEL)
 
-    Adds:
-    - persistent UI update loop
-    - safe start/stop per guild
+    Responsibilities:
+    - playback lifecycle ownership
+    - queue progression
+    - event handling (NO bot.py involvement)
+    - UI sync trigger
     """
 
     IDLE_TIMEOUT = 15
@@ -19,20 +22,17 @@ class MusicEngine:
     def __init__(self):
         self._locks: dict[int, asyncio.Lock] = {}
         self._idle_tasks: dict[int, asyncio.Task] = {}
-        self._ui_tasks: dict[int, asyncio.Task] = {}
+        self._skip_guard: set[int] = set()
 
     # =====================================================
     # GUILD RESOLVE
     # =====================================================
     def _guild_id(self, player: wavelink.Player) -> int:
         guild = getattr(player, "guild", None)
-
         if guild:
             return guild.id
-
         if hasattr(player, "_guild") and player._guild:
             return player._guild.id
-
         raise RuntimeError("Cannot resolve guild id")
 
     # =====================================================
@@ -44,7 +44,7 @@ class MusicEngine:
         return self._locks[guild_id]
 
     # =====================================================
-    # IDLE DISCONNECT
+    # IDLE HANDLING
     # =====================================================
     def _cancel_idle(self, guild_id: int):
         task = self._idle_tasks.pop(guild_id, None)
@@ -54,8 +54,7 @@ class MusicEngine:
     async def _idle_disconnect(self, player: wavelink.Player):
         await asyncio.sleep(self.IDLE_TIMEOUT)
 
-        guild_id = self._guild_id(player)
-        state = music_manager.get_player(guild_id)
+        state = music_manager.get_player(self._guild_id(player))
 
         if state.current or state.queue.all():
             return
@@ -66,42 +65,50 @@ class MusicEngine:
             pass
 
     # =====================================================
-    # UI LOOP (🔥 NEW CORE FEATURE)
+    # UI SYNC
     # =====================================================
-    async def _ui_loop(self, guild_id: int, player: wavelink.Player):
-        from services.music.player_message_manager import player_message_manager
-
-        while True:
-            try:
-                state = music_manager.get_player(guild_id)
-
-                if not state.current:
-                    return
-
-                guild = getattr(player, "guild", None)
-                if guild:
-                    await player_message_manager.update(guild)
-
-                await asyncio.sleep(5)
-
-            except Exception:
+    async def _notify_ui(self, player: wavelink.Player):
+        try:
+            guild = player.guild
+            if not guild:
                 return
 
-    def _start_ui_loop(self, player: wavelink.Player):
-        guild_id = self._guild_id(player)
+            state = music_manager.get_player(guild.id)
 
-        if guild_id not in self._ui_tasks or self._ui_tasks[guild_id].done():
-            self._ui_tasks[guild_id] = asyncio.create_task(
-                self._ui_loop(guild_id, player)
-            )
+            if not state.player_channel_id:
+                return
 
-    def _stop_ui_loop(self, guild_id: int):
-        task = self._ui_tasks.pop(guild_id, None)
-        if task:
-            task.cancel()
+            channel = guild.get_channel(state.player_channel_id)
+            if not channel:
+                return
+
+            await player_message_manager.update(guild)
+
+        except Exception as e:
+            print(f"[MUSIC] UI update failed: {e}")
 
     # =====================================================
-    # PLAY NEXT
+    # PLAYER REGISTRATION (STAGE 3.5 CORE)
+    # =====================================================
+    def bind_player(self, player: wavelink.Player):
+        """
+        Engine becomes owner of Lavalink events.
+        """
+
+        @player.on("track_end")
+        async def _track_end(_):
+            await self._play_next(player)
+
+        @player.on("track_stuck")
+        async def _track_stuck(_):
+            await self._play_next(player)
+
+        @player.on("track_exception")
+        async def _track_exception(_):
+            await self._play_next(player)
+
+    # =====================================================
+    # PLAYBACK CORE
     # =====================================================
     async def _play_next(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
@@ -114,14 +121,7 @@ class MusicEngine:
 
             if not track:
                 state.current = None
-
-                self._stop_ui_loop(guild_id)
-
-                if guild_id not in self._idle_tasks:
-                    self._idle_tasks[guild_id] = asyncio.create_task(
-                        self._idle_disconnect(player)
-                    )
-
+                await self._notify_ui(player)
                 return
 
             self._cancel_idle(guild_id)
@@ -135,45 +135,41 @@ class MusicEngine:
                     results = await wavelink.Playable.search(
                         track.uri or track.title
                     )
-
                     if not results:
                         return
-
                     playable = results[0]
 
                 await player.play(playable)
 
-                # 🔥 START LIVE UI LOOP HERE
-                self._start_ui_loop(player)
+                await self._notify_ui(player)
 
-            except Exception:
+            except Exception as e:
+                print(f"[MUSIC] play_next failed: {e}")
                 state.current = None
                 await self._play_next(player)
 
     # =====================================================
-    # ENQUEUE
+    # PUBLIC API
     # =====================================================
     async def enqueue(self, player: wavelink.Player, track):
-        """
-        Public API for queue insertion.
-
-        Does NOT start playback directly unless idle.
-        """
         guild_id = self._guild_id(player)
-
         state = music_manager.get_player(guild_id)
+
         state.queue.add(track)
 
         self._cancel_idle(guild_id)
 
-        # Only trigger playback if nothing is currently playing
+    async def start(self, player: wavelink.Player):
+        state = music_manager.get_player(self._guild_id(player))
+
         if not state.current:
             await self._play_next(player)
 
-    # =====================================================
-    # SKIP
-    # =====================================================
     async def skip(self, player: wavelink.Player):
+        guild_id = self._guild_id(player)
+
+        self._skip_guard.add(guild_id)
+
         try:
             await player.stop()
         except Exception:
@@ -181,44 +177,19 @@ class MusicEngine:
 
         await self._play_next(player)
 
-    # =====================================================
-    # STOP
-    # =====================================================
     async def stop(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
         state = music_manager.get_player(guild_id)
-
         state.queue.clear()
         state.current = None
-
-        self._cancel_idle(guild_id)
-        self._stop_ui_loop(guild_id)
 
         try:
             await player.stop()
         except Exception:
             pass
 
-    # =====================================================
-    # Track End
-    # =====================================================
-    async def handle_track_end(self, player: wavelink.Player):
-        """
-        Compatibility layer for Lavalink event system.
-
-        Stage 3 architecture keeps engine as source of truth,
-        but Lavalink still calls this externally.
-        """
-
-        guild_id = self._guild_id(player)
-        state = music_manager.get_player(guild_id)
-
-        # prevent double-advance if skip already triggered next track
-        if not state.current:
-            return
-
-        await self._play_next(player)
+        await self._notify_ui(player)
 
 
 engine = MusicEngine()

@@ -185,35 +185,6 @@ class DiscordBot(commands.Bot):
 
  
     # =====================================================
-    # TRACK END
-    # =====================================================
-    async def on_wavelink_track_end(self, payload):
-        """
-        Track end handler.
-
-        Engine owns queue progression + UI updates.
-        """
-
-        player = payload.player
-        if not player:
-            return
-
-        guild = getattr(player, "guild", None)
-        if not guild:
-            return
-
-        state = music_manager.get_player(guild.id)
-        state.current = None
-
-        try:
-            await engine.handle_track_end(player)
-
-        except Exception:
-            logging.exception(
-                "[MUSIC] Failed advancing queue for guild %s",
-                guild.id
-            )
-    # =====================================================
     # SHUTDOWN
     # =====================================================
     async def close(self):
