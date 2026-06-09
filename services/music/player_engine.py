@@ -70,16 +70,20 @@ class MusicEngine:
 
             track = state.queue.next()
 
+#            if not track:
+#                state.current = None
+#
+#            # auto disconnect when queue finishes
+#            try:
+#                await player.disconnect()
+#            except Exception:
+#                pass
+#
+#            return
+
             if not track:
                 state.current = None
-
-            # auto disconnect when queue finishes
-            try:
-                await player.disconnect()
-            except Exception:
-                pass
-
-            return
+                return
 
             state.current = track
 
