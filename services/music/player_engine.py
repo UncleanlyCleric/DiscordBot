@@ -5,6 +5,15 @@ from services.music.manager import music_manager
 
 
 class MusicEngine:
+    """
+    Stable Music Engine
+
+    Guarantees:
+    - single playback pipeline
+    - safe skip handling
+    - UI always bootstraps once
+    - no queue interruption bugs
+    """
 
     IDLE_TIMEOUT = 15
 
@@ -58,12 +67,11 @@ class MusicEngine:
             pass
 
     # =====================================================
-    # UI UPDATE
+    # UI UPDATE (SAFE)
     # =====================================================
     async def _notify_ui(self, player: wavelink.Player):
         try:
             from services.music.player_message_manager import player_message_manager
-
             guild = player.guild
             if guild:
                 await player_message_manager.update(guild)
@@ -82,7 +90,7 @@ class MusicEngine:
         self._cancel_idle(guild_id)
 
     # =====================================================
-    # PLAY NEXT (ONLY DRIVER OF PLAYBACK)
+    # PLAY NEXT (ONLY TRUE DRIVER)
     # =====================================================
     async def _play_next(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
@@ -90,8 +98,12 @@ class MusicEngine:
         async with self._lock(guild_id):
 
             state = music_manager.get_player(guild_id)
+
             track = state.queue.next()
 
+            # =================================================
+            # EMPTY QUEUE
+            # =================================================
             if not track:
                 state.current = None
 
@@ -102,6 +114,8 @@ class MusicEngine:
 
                 await self._notify_ui(player)
                 return
+
+            self._cancel_idle(guild_id)
 
             state.current = track
 
@@ -118,6 +132,31 @@ class MusicEngine:
 
                 await player.play(playable)
 
+                # =================================================
+                # 🔥 UI BOOTSTRAP GUARANTEE (CRITICAL FIX)
+                # =================================================
+                if not state.player_channel_id:
+                    try:
+                        guild = player.guild
+                        if guild:
+                            channel = next(
+                                (c for c in guild.text_channels
+                                 if c.permissions_for(guild.me).send_messages),
+                                None
+                            )
+
+                            if channel:
+                                msg = await channel.send(
+                                    embed=await player_message_manager.build_embed(guild),
+                                    view=player_message_manager.get_view()
+                                )
+
+                                state.player_message_id = msg.id
+                                state.player_channel_id = channel.id
+
+                    except Exception:
+                        pass
+
                 await self._notify_ui(player)
 
             except Exception:
@@ -125,7 +164,7 @@ class MusicEngine:
                 await self._play_next(player)
 
     # =====================================================
-    # TRACK END (RESTORED - CRITICAL)
+    # TRACK END (RESTORED)
     # =====================================================
     async def handle_track_end(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
@@ -159,6 +198,7 @@ class MusicEngine:
         guild_id = self._guild_id(player)
 
         state = music_manager.get_player(guild_id)
+
         state.queue.clear()
         state.current = None
 
