@@ -1,24 +1,18 @@
 import asyncio
+import random
 import wavelink
 
 from services.music.manager import music_manager
 
 
 class MusicEngine:
-    """
-    Production-safe Wavelink 4 music engine.
-
-    Responsibilities:
-    - playback control only
-    - queue consumption
-    - concurrency safety
-    """
 
     def __init__(self):
         self._locks: dict[int, asyncio.Lock] = {}
+        self._volume: dict[int, int] = {}
 
     # =====================================================
-    # INTERNAL: GUILD ID RESOLUTION
+    # GUILD ID
     # =====================================================
     def _guild_id(self, player: wavelink.Player) -> int:
         guild = getattr(player, "guild", None)
@@ -29,15 +23,35 @@ class MusicEngine:
         if hasattr(player, "_guild") and player._guild:
             return player._guild.id
 
-        raise RuntimeError("Cannot resolve guild id from player")
+        raise RuntimeError("Cannot resolve guild id")
 
     # =====================================================
-    # LOCK PER GUILD (CRITICAL FIX)
+    # LOCK
     # =====================================================
     def _lock(self, guild_id: int) -> asyncio.Lock:
         if guild_id not in self._locks:
             self._locks[guild_id] = asyncio.Lock()
         return self._locks[guild_id]
+
+    # =====================================================
+    # VOLUME
+    # =====================================================
+    def get_volume(self, guild_id: int) -> int:
+        return self._volume.get(guild_id, 100)
+
+    def set_volume(self, guild_id: int, value: int):
+        self._volume[guild_id] = max(0, min(100, value))
+
+    # =====================================================
+    # SHUFFLE
+    # =====================================================
+    async def shuffle(self, player: wavelink.Player):
+
+        guild_id = self._guild_id(player)
+        state = music_manager.get_player(guild_id)
+
+        queue = state.queue._queue
+        random.shuffle(queue)
 
     # =====================================================
     # ENQUEUE
@@ -47,23 +61,19 @@ class MusicEngine:
         guild_id = self._guild_id(player)
         state = music_manager.get_player(guild_id)
 
-        # -----------------------------
-        # QUEUE INTELLIGENCE HOOK POINT
-        # (dedupe should happen here or in queue class)
-        # -----------------------------
         state.queue.add(track)
 
         if not player.playing:
             await self._play_next(player)
 
     # =====================================================
-    # PUBLIC: PLAY NEXT
+    # NEXT
     # =====================================================
     async def play_next(self, player: wavelink.Player):
         await self._play_next(player)
 
     # =====================================================
-    # CORE PLAYBACK ENGINE (LOCKED)
+    # CORE ENGINE
     # =====================================================
     async def _play_next(self, player: wavelink.Player):
 
@@ -89,10 +99,17 @@ class MusicEngine:
                 if not results:
                     return
 
+                volume = self.get_volume(guild_id)
+
+                try:
+                    await player.set_volume(volume)
+                except Exception:
+                    pass
+
                 await player.play(results[0])
 
             except Exception as e:
-                print(f"[ENGINE] play error: {e}")
+                print(f"[ENGINE] error: {e}")
                 await self._play_next(player)
 
     # =====================================================
