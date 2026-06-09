@@ -42,25 +42,42 @@ def build_now_playing_embed(state):
         )
 
     # =====================================================
-    # LIVE PROGRESS (🔥 NEW)
+    # LIVE PROGRESS (🔥 NEW - SAFE)
     # =====================================================
+
+    import time
+
     started = getattr(state, "current_started_at", None)
     duration = getattr(track, "length", None)
 
     if started and duration:
-        elapsed = (time.time() - started) * 1000
+        try:
+            elapsed = (time.time() - started) * 1000
 
-        bar = _progress_bar(elapsed, duration)
+            # clamp to avoid overflow glitches
+            elapsed = max(0, min(elapsed, duration))
 
-        embed.add_field(
-            name="Progress",
-            value=f"`{bar}`",
-            inline=False
-        )
+            bar = _progress_bar(elapsed, duration)
+
+            embed.add_field(
+                name="Progress",
+                value=f"`{bar}`",
+                inline=False
+            )
+
+        except Exception:
+            # never break UI due to progress
+            pass
+
+    # =====================================================
+    # QUEUE DISPLAY
+    # =====================================================
+
+    queue_len = len(state.queue.all()) if hasattr(state.queue, "all") else 0
 
     embed.add_field(
         name="Queue",
-        value=str(len(state.queue)),
+        value=str(queue_len),
         inline=True
     )
 
