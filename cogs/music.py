@@ -50,12 +50,13 @@ class MusicCog(commands.Cog):
         interaction: discord.Interaction,
         query: str
     ):
-        await interaction.response.defer()
-
         if not interaction.guild:
-            return await interaction.followup.send(
-                "Guild only command."
+            return await interaction.response.send_message(
+                "Guild only command.",
+                ephemeral=True
             )
+
+        await interaction.response.defer()
 
         player = await self._get_player(interaction)
 
@@ -77,24 +78,25 @@ class MusicCog(commands.Cog):
         primary = tracks[0]
 
         # =====================================================
-        # ENGINE OWNED FLOW
+        # ENGINE FLOW
         # =====================================================
         await engine.enqueue(player, primary)
 
-        # add extras directly to queue (no engine side effects)
         state = music_manager.get_player(interaction.guild_id)
 
         for t in tracks[1:3]:
             state.queue.add(t)
 
-        # ensure playback starts ONLY once
         await engine.start(player)
 
-        # UI update (engine will also trigger, but this ensures instant feedback)
-        await player_message_manager.update(
-            interaction.guild,
-            interaction.channel
-        )
+        # =====================================================
+        # UI UPDATE (SAFE)
+        # =====================================================
+        if interaction.channel:
+            await player_message_manager.update(
+                interaction.guild,
+                interaction.channel
+            )
 
         await interaction.followup.send(
             content=f"🎵 Queued: **{primary.title}**"
@@ -118,10 +120,11 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await player_message_manager.update(
-            interaction.guild,
-            interaction.channel
-        )
+        if interaction.channel:
+            await player_message_manager.update(
+                interaction.guild,
+                interaction.channel
+            )
 
         await interaction.response.send_message(
             "🛑 Stopped",
@@ -141,10 +144,11 @@ class MusicCog(commands.Cog):
         if player:
             await engine.skip(player)
 
-        await player_message_manager.update(
-            interaction.guild,
-            interaction.channel
-        )
+        if interaction.channel:
+            await player_message_manager.update(
+                interaction.guild,
+                interaction.channel
+            )
 
         await interaction.response.send_message(
             "⏭ Skipped",
@@ -167,10 +171,11 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await player_message_manager.update(
-            interaction.guild,
-            interaction.channel
-        )
+        if interaction.channel:
+            await player_message_manager.update(
+                interaction.guild,
+                interaction.channel
+            )
 
         await interaction.response.send_message(
             "⏸ Paused",
@@ -193,10 +198,11 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await player_message_manager.update(
-            interaction.guild,
-            interaction.channel
-        )
+        if interaction.channel:
+            await player_message_manager.update(
+                interaction.guild,
+                interaction.channel
+            )
 
         await interaction.response.send_message(
             "▶ Resumed",
