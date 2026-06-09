@@ -98,18 +98,16 @@ class MusicEngine:
     # SKIP
     # =====================================================
     async def skip(self, player: wavelink.Player):
-        state = music_manager.get_player(player.guild.id)
 
-        logging.info("[MUSIC] skip() guild=%s", player.guild.id)
+        state = music_manager.get_player(player.guild.id)
 
         state.current = None
         state.current_started_at = None
         state.current_duration = None
 
-        try:
-            await player.stop()
-        except Exception:
-            pass
+        await player.stop()  # IMPORTANT: forces track_end event
+
+        # let handle_track_end() drive next track
 
     # =====================================================
     # STOP
