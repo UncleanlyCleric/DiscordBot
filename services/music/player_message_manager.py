@@ -1,7 +1,11 @@
+import logging
+
 import discord
 
 from services.music.manager import music_manager
 from services.music.now_playing import build_now_playing_embed
+
+logging.info("[UI] PlayerMessageManager module loaded")
 
 
 class PlayerMessageManager:
@@ -10,30 +14,66 @@ class PlayerMessageManager:
     """
 
     async def update(self, guild: discord.Guild):
-        print("[UI] update() CALLED")
+
+        logging.info(
+            "[UI] update() CALLED guild=%s",
+            getattr(guild, "id", "unknown")
+        )
 
         state = music_manager.get_player(guild.id)
 
         channel_id = state.player_channel_id
         message_id = state.player_message_id
 
-        print(f"[UI] state channel_id={channel_id} message_id={message_id}")
+        logging.info(
+            "[UI] state channel_id=%s message_id=%s current=%s",
+            channel_id,
+            message_id,
+            getattr(state.current, "title", None)
+        )
 
         if not channel_id:
-            print("[UI] ABORT: no channel_id set")
+            logging.warning(
+                "[UI] ABORT: no channel_id set guild=%s",
+                guild.id
+            )
             return
 
         channel = guild.get_channel(channel_id)
 
         if channel is None:
             try:
-                print("[UI] channel not cached, fetching...")
+                logging.info(
+                    "[UI] channel not cached, fetching channel_id=%s",
+                    channel_id
+                )
+
                 channel = await guild.fetch_channel(channel_id)
-            except Exception as e:
-                print(f"[UI] FAILED to fetch channel: {e}")
+
+                logging.info(
+                    "[UI] fetched channel successfully channel_id=%s",
+                    channel_id
+                )
+
+            except Exception:
+                logging.exception(
+                    "[UI] FAILED to fetch channel_id=%s",
+                    channel_id
+                )
                 return
 
-        embed = build_now_playing_embed(state)
+        try:
+            embed = build_now_playing_embed(state)
+
+            logging.info(
+                "[UI] embed built current=%s queue=%s",
+                getattr(state.current, "title", None),
+                len(state.queue.all())
+            )
+
+        except Exception:
+            logging.exception("[UI] embed generation failed")
+            return
 
         from services.music.ui.music_player_view import MusicPlayerView
 
@@ -41,8 +81,13 @@ class PlayerMessageManager:
         # FIRST MESSAGE
         # =====================================================
         if not message_id:
+
             try:
-                print("[UI] sending new now-playing message...")
+                logging.info(
+                    "[UI] creating first player message "
+                    "channel_id=%s",
+                    channel.id
+                )
 
                 msg = await channel.send(
                     embed=embed,
@@ -52,10 +97,17 @@ class PlayerMessageManager:
                 state.player_message_id = msg.id
                 state.player_channel_id = channel.id
 
-                print(f"[UI] created message id={msg.id}")
+                logging.info(
+                    "[UI] created player message "
+                    "message_id=%s channel_id=%s",
+                    msg.id,
+                    channel.id
+                )
 
-            except Exception as e:
-                print(f"[UI] FAILED to send message: {e}")
+            except Exception:
+                logging.exception(
+                    "[UI] FAILED TO CREATE PLAYER MESSAGE"
+                )
 
             return
 
@@ -63,22 +115,46 @@ class PlayerMessageManager:
         # UPDATE EXISTING MESSAGE
         # =====================================================
         try:
-            print("[UI] fetching existing message...")
+
+            logging.info(
+                "[UI] fetching existing message "
+                "message_id=%s",
+                message_id
+            )
 
             msg = await channel.fetch_message(message_id)
+
+            logging.info(
+                "[UI] editing existing message "
+                "message_id=%s",
+                message_id
+            )
 
             await msg.edit(
                 embed=embed,
                 view=MusicPlayerView()
             )
 
-            print("[UI] message updated successfully")
+            logging.info(
+                "[UI] message updated successfully "
+                "message_id=%s",
+                message_id
+            )
 
-        except Exception as e:
-            print(f"[UI] UPDATE FAILED: {e}")
+        except Exception:
+
+            logging.exception(
+                "[UI] UPDATE FAILED message_id=%s",
+                message_id
+            )
 
             try:
-                print("[UI] fallback: sending new message...")
+
+                logging.info(
+                    "[UI] fallback creating new message "
+                    "channel_id=%s",
+                    channel.id
+                )
 
                 msg = await channel.send(
                     embed=embed,
@@ -88,10 +164,16 @@ class PlayerMessageManager:
                 state.player_message_id = msg.id
                 state.player_channel_id = channel.id
 
-                print(f"[UI] fallback created message id={msg.id}")
+                logging.info(
+                    "[UI] fallback created message "
+                    "message_id=%s",
+                    msg.id
+                )
 
-            except Exception as e2:
-                print(f"[UI] FALLBACK FAILED: {e2}")
+            except Exception:
+                logging.exception(
+                    "[UI] FALLBACK FAILED"
+                )
 
 
 player_message_manager = PlayerMessageManager()
