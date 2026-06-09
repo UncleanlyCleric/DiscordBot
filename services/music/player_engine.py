@@ -229,17 +229,19 @@ class MusicEngine:
             except Exception as e:
                 print(f"[ENGINE] play error: {e}")
 
-                try:
+#                try:
                     state.current = None
-                except Exception:
+#                except Exception:
                     pass
+
+
 
                 await self._play_next(player)
 
     # =====================================================
     # SKIP
     # =====================================================
-    async def skip(self, player: wavelink.Player):
+ #   async def skip(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
         state = music_manager.get_player(guild_id)
@@ -252,7 +254,20 @@ class MusicEngine:
             pass
 
         await self._play_next(player)
+    async def skip(self, player: wavelink.Player):
+        guild_id = self._guild_id(player)
 
+        state = music_manager.get_player(guild_id)
+
+        state.current = None
+
+        # Let the Wavelink track-end event advance
+        # the queue. Calling _play_next() here causes
+        # double advancement after a manual skip.
+        try:
+            await player.stop()
+        except Exception:
+            pass
     # =====================================================
     # STOP
     # =====================================================
