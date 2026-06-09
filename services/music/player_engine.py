@@ -6,12 +6,13 @@ from services.music.manager import music_manager
 
 class MusicEngine:
     """
-    Production-safe Wavelink 4 engine.
+    Phase 9 Music Engine (Stable Playback Core)
 
-    Rules:
-    - ONLY accepts wavelink.Player
-    - NO discord imports
-    - SINGLE SOURCE OF TRUTH for playback
+    Goals:
+    - deterministic queue progression
+    - no double-advance (skip vs track_end safe)
+    - safe idle disconnect
+    - clean state transitions
     """
 
     IDLE_TIMEOUT = 15
@@ -20,9 +21,8 @@ class MusicEngine:
         self._locks: dict[int, asyncio.Lock] = {}
         self._idle_tasks: dict[int, asyncio.Task] = {}
 
-        # Phase 7/8 stability systems
-        self._playback_token: dict[int, int] = {}
-        self._skip_lock: dict[int, bool] = {}
+        # prevents race between skip and track_end
+        self._skip_flag: set[int] = set()
 
     # =====================================================
     # GUILD RESOLVE
@@ -47,18 +47,10 @@ class MusicEngine:
         return self._locks[guild_id]
 
     # =====================================================
-    # TOKEN (prevents race conditions)
+    # IDLE CONTROL
     # =====================================================
-    def _next_token(self, guild_id: int) -> int:
-        self._playback_token[guild_id] = self._playback_token.get(guild_id, 0) + 1
-        return self._playback_token[guild_id]
-
-    # =====================================================
-    # IDLE TIMER
-    # =====================================================
-    def _cancel_idle_timer(self, guild_id: int):
+    def _cancel_idle(self, guild_id: int):
         task = self._idle_tasks.pop(guild_id, None)
-
         if task and not task.done():
             task.cancel()
 
@@ -69,21 +61,20 @@ class MusicEngine:
             guild_id = self._guild_id(player)
             state = music_manager.get_player(guild_id)
 
-            if state.current is not None:
-                return
-
-            if state.queue.all():
+            # still active? abort
+            if state.current or state.queue.all():
                 return
 
             await player.disconnect()
+
+            print(f"[ENGINE] Idle disconnect guild={guild_id}")
 
         except Exception:
             pass
 
         finally:
             try:
-                guild_id = self._guild_id(player)
-                self._idle_tasks.pop(guild_id, None)
+                self._idle_tasks.pop(self._guild_id(player), None)
             except Exception:
                 pass
 
@@ -96,33 +87,26 @@ class MusicEngine:
         state = music_manager.get_player(guild_id)
         state.queue.add(track)
 
-        self._cancel_idle_timer(guild_id)
+        self._cancel_idle(guild_id)
 
         if not state.current:
             await self._play_next(player)
 
     # =====================================================
-    # PUBLIC NEXT
-    # =====================================================
-    async def play_next(self, player: wavelink.Player):
-        await self._play_next(player)
-
-    # =====================================================
-    # CORE ENGINE
+    # PLAY NEXT (CORE)
     # =====================================================
     async def _play_next(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
         async with self._lock(guild_id):
 
-            # skip guard (prevents double advancement)
-            if self._skip_lock.pop(guild_id, False):
-                return
-
             state = music_manager.get_player(guild_id)
 
             track = state.queue.next()
 
+            # -------------------------------------------------
+            # EMPTY QUEUE → IDLE MODE
+            # -------------------------------------------------
             if not track:
                 state.current = None
 
@@ -133,13 +117,12 @@ class MusicEngine:
 
                 return
 
-            self._cancel_idle_timer(guild_id)
+            # reset skip flag once we advance properly
+            self._skip_flag.discard(guild_id)
+
+            self._cancel_idle(guild_id)
 
             state.current = track
-
-            # token safety
-            token = self._next_token(guild_id)
-            state.play_token = token
 
             try:
                 playable = getattr(track, "playable", None)
@@ -156,19 +139,38 @@ class MusicEngine:
 
                 await player.play(playable)
 
+                print(f"[ENGINE] Now playing: {track.title}")
+
             except Exception as e:
                 print(f"[ENGINE] play error: {e}")
                 state.current = None
                 await self._play_next(player)
 
     # =====================================================
-    # SKIP (FIXED — DO NOT DOUBLE-POP QUEUE)
+    # TRACK END HANDLER SAFETY
+    # =====================================================
+    async def handle_track_end(self, player: wavelink.Player):
+        """
+        Call this from bot.py instead of directly trusting track_end event.
+        """
+
+        guild_id = self._guild_id(player)
+
+        # skip already handled manually → ignore duplicate track_end
+        if guild_id in self._skip_flag:
+            self._skip_flag.discard(guild_id)
+            return
+
+        await self._play_next(player)
+
+    # =====================================================
+    # SKIP (FIXED)
     # =====================================================
     async def skip(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
-        # prevent race with track_end
-        self._skip_lock[guild_id] = True
+        # mark skip so track_end doesn't double-advance
+        self._skip_flag.add(guild_id)
 
         state = music_manager.get_player(guild_id)
         state.current = None
@@ -177,6 +179,10 @@ class MusicEngine:
             await player.stop()
         except Exception:
             pass
+
+        # IMPORTANT:
+        # do NOT call _play_next here
+        # track_end or handler will advance safely
 
     # =====================================================
     # STOP
@@ -189,7 +195,7 @@ class MusicEngine:
         state.queue.clear()
         state.current = None
 
-        self._cancel_idle_timer(guild_id)
+        self._cancel_idle(guild_id)
 
         try:
             await player.stop()

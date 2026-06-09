@@ -202,7 +202,7 @@ class DiscordBot(commands.Bot):
         state.current = None
 
         try:
-            await engine.play_next(player)
+            await engine.handle_track_end(player)
 
         except Exception:
             logging.exception(
