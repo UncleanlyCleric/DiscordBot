@@ -10,10 +10,9 @@ class GuildPlayer:
     One instance per guild.
 
     Responsibilities:
-    - queue management
-    - playback state
-    - interaction with Lavalink (later)
-    - autoplay trigger
+    - queue storage ONLY
+    - playback state tracking ONLY
+    - NO playback control (handled by player_engine)
     """
 
     def __init__(self, guild_id: int):
@@ -34,8 +33,17 @@ class GuildPlayer:
             self.queue.add(track)
 
     async def skip(self):
+        """
+        IMPORTANT:
+        Skip MUST NOT advance the queue.
+        Engine handles playback progression.
+
+        We only reset state here.
+        """
         async with self.lock:
-            return await self._next_track()
+            self.current = None
+            self.is_playing = False
+            return None
 
     async def clear(self):
         async with self.lock:
@@ -44,30 +52,34 @@ class GuildPlayer:
             self.is_playing = False
 
     # -------------------------
-    # PLAYBACK CORE
+    # STATE TRANSITIONS (ENGINE CONTROLLED)
     # -------------------------
 
     async def start(self):
+        """
+        DO NOT advance queue here anymore.
+        Engine is the single source of truth.
+        """
         async with self.lock:
             if self.current:
                 return self.current
 
-            return await self._next_track()
+            return self.current
 
     async def _next_track(self):
-        self.current = self.queue.next()
+        """
+        DEPRECATED LOGIC (kept for compatibility but NOT USED)
+        DO NOT CALL FROM ENGINE.
+        """
+        async with self.lock:
+            self.current = self.queue.next()
 
-        if not self.current:
-            self.is_playing = False
-            return None
+            if not self.current:
+                self.is_playing = False
+                return None
 
-        self.is_playing = True
-
-        # NOTE:
-        # Lavalink playback will be wired here later
-        # For now this is the state machine
-
-        return self.current
+            self.is_playing = True
+            return self.current
 
     # -------------------------
     # STATE ACCESS
