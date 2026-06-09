@@ -16,6 +16,7 @@ from core.audit_logger import audit
 from database.migrations import migration_runner
 
 from services.music.manager import music_manager
+from services.music.player_engine import engine
 
 
 sys.path.append(str(Path(__file__).resolve().parent))
@@ -179,16 +180,35 @@ class DiscordBot(commands.Bot):
     # TRACK END (SAFE STATE ONLY)
     # =====================================================
     async def on_wavelink_track_end(self, payload):
+        """
+        Queue progression handler.
+
+        Fires whenever Lavalink reports a track ended.
+        Automatically advances to the next queued track.
+        """
+
         player = payload.player
+
         if not player:
             return
 
         guild = getattr(player, "guild", None)
+
         if not guild:
             return
 
         state = music_manager.get_player(guild.id)
+
         state.current = None
+
+        try:
+            await engine.play_next(player)
+
+        except Exception:
+            logging.exception(
+                "[MUSIC] Failed advancing queue for guild %s",
+                guild.id
+            )
 
     # =====================================================
     # SHUTDOWN

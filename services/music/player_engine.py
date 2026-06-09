@@ -48,7 +48,8 @@ class MusicEngine:
         state = music_manager.get_player(guild_id)
         state.queue.add(track)
 
-        if not player.playing:
+        # safer than player.playing during transitions
+        if not state.current:
             await self._play_next(player)
 
     # =====================================================
@@ -71,7 +72,14 @@ class MusicEngine:
 
             if not track:
                 state.current = None
-                return
+
+            # auto disconnect when queue finishes
+            try:
+                await player.disconnect()
+            except Exception:
+                pass
+
+            return
 
             state.current = track
 
