@@ -22,6 +22,9 @@ class GuildPlayer:
         self.current: Optional[Track] = None
         self.is_playing = False
 
+        self.player_message_id = None
+        self.player_channel_id = None
+
         self.lock = asyncio.Lock()
 
     # -------------------------

@@ -1,78 +1,88 @@
 import discord
 
-
-def progress_bar(current: int, total: int, length: int = 12):
-    if not total:
-        return "▱" * length
-
-    ratio = min(max(current / total, 0), 1)
-    filled = int(ratio * length)
-
-    return "▰" * filled + "▱" * (length - filled)
-
+from services.music.player_engine import engine
 
 class MusicPlayerView(discord.ui.View):
-    """
-    Phase 11 UI Layer
 
-    - DOES NOT control playback directly
-    - ONLY calls bot/cog methods
-    """
-
-    def __init__(self, bot, guild_id: int):
+    def __init__(self):
         super().__init__(timeout=None)
 
-        self.bot = bot
-        self.guild_id = guild_id
-
     # =====================================================
-    # HELPERS
+    # PAUSE / RESUME
     # =====================================================
-    def get_player_state(self):
-        return self.bot.get_cog("MusicCog").get_state(self.guild_id)
+    @discord.ui.button(
+        emoji="⏯",
+        style=discord.ButtonStyle.secondary
+    )
+    async def pause_resume(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+        if not interaction.guild:
+            return
 
-    def get_engine(self):
-        return self.bot.get_cog("MusicCog").engine
+        player = interaction.guild.voice_client
 
-    # =====================================================
-    # PLAY/PAUSE (optional future expand)
-    # =====================================================
-    @discord.ui.button(label="Pause", style=discord.ButtonStyle.secondary)
-    async def pause(self, interaction: discord.Interaction, button: discord.ui.Button):
-        player = self.get_player_state()
+        if not player:
+            await interaction.response.defer()
+            return
 
-        vc = interaction.guild.voice_client
-        if vc and vc.is_playing():
-            await vc.pause()
-            button.label = "Resume"
-        else:
-            await vc.resume()
-            button.label = "Pause"
+        try:
+            if player.paused:
+                await player.pause(False)
+            else:
+                await player.pause(True)
+        except Exception:
+            pass
 
-        await interaction.response.edit_message(view=self)
+        await interaction.response.defer()
 
     # =====================================================
     # SKIP
     # =====================================================
-    @discord.ui.button(label="Skip", style=discord.ButtonStyle.primary)
-    async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
-        engine = self.get_engine()
-        vc = interaction.guild.voice_client
+    @discord.ui.button(
+        emoji="⏭",
+        style=discord.ButtonStyle.primary
+    )
+    async def skip(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+        if not interaction.guild:
+            return
 
-        if vc:
-            await engine.skip(vc)
+        player = interaction.guild.voice_client
+
+        if player:
+            await engine.skip(player)
 
         await interaction.response.defer()
 
     # =====================================================
     # STOP
     # =====================================================
-    @discord.ui.button(label="Stop", style=discord.ButtonStyle.danger)
-    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
-        engine = self.get_engine()
-        vc = interaction.guild.voice_client
+    @discord.ui.button(
+        emoji="⏹",
+        style=discord.ButtonStyle.danger
+    )
+    async def stop(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+        if not interaction.guild:
+            return
 
-        if vc:
-            await engine.stop(vc)
+        player = interaction.guild.voice_client
+
+        if player:
+            await engine.stop(player)
+
+            try:
+                await player.disconnect()
+            except Exception:
+                pass
 
         await interaction.response.defer()

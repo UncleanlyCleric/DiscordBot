@@ -8,9 +8,11 @@ from services.music.resolver import music_resolver
 from services.music.manager import music_manager
 from services.music.player_engine import engine
 
+from services.music.now_playing import build_now_playing_embed
+from services.music.ui.music_player_view import MusicPlayerView
 
 class MusicCog(commands.Cog):
-
+    
     def __init__(self, bot):
         self.bot = bot
 
@@ -59,6 +61,10 @@ class MusicCog(commands.Cog):
 
         # ENGINE OWNED FLOW
         await engine.enqueue(player, primary)
+
+        await self._update_player_message(
+            interaction
+        )
 
         for t in tracks[1:3]:
             await engine.enqueue(player, t)
@@ -151,6 +157,53 @@ class MusicCog(commands.Cog):
 
         await interaction.response.send_message(msg)
 
+    async def _update_player_message(
+        self,
+        interaction: discord.Interaction
+    ):
+        state = music_manager.get_player(
+            interaction.guild_id
+        )
+
+        embed = build_now_playing_embed(state)
+
+        channel = interaction.channel
+
+        if channel is None:
+            return
+
+        if not state.player_message_id:
+
+            msg = await channel.send(
+                embed=embed,
+                view=MusicPlayerView()
+            )
+
+            state.player_message_id = msg.id
+            state.player_channel_id = channel.id
+
+            return
+
+        try:
+            msg = await channel.fetch_message(
+                state.player_message_id
+            )
+
+            await msg.edit(
+                embed=embed,
+                view=MusicPlayerView()
+            )
+
+        except Exception:
+
+            msg = await channel.send(
+                embed=embed,
+                view=MusicPlayerView()
+            )
+
+            state.player_message_id = msg.id
+            state.player_channel_id = channel.id
+            
 
 # =====================================================
 # FIX: REQUIRED EXTENSION ENTRYPOINT

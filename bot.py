@@ -6,6 +6,7 @@ from pathlib import Path
 import discord
 from discord.ext import commands
 
+from services.music.ui.music_player_view import MusicPlayerView
 import wavelink
 
 from core.logger import setup_logging
@@ -95,6 +96,10 @@ class DiscordBot(commands.Bot):
                 audit.cog_failed(cog, e)
                 logging.exception("[COG] Failed %s", cog)
 
+        #from services.music.ui.music_player_view import MusicPlayerView
+
+        self.add_view(MusicPlayerView())
+
         # =====================================================
         # SYNC COMMANDS (PRODUCTION + DEV GUILD MODE)
         # =====================================================
@@ -176,32 +181,34 @@ class DiscordBot(commands.Bot):
     async def on_wavelink_node_ready(self, payload):
         logging.info("[LAVALINK] Node fully ready: %s", payload.node.identifier)
 
+ 
     # =====================================================
-    # TRACK END (SAFE STATE ONLY)
+    # TRACK END
     # =====================================================
     async def on_wavelink_track_end(self, payload):
         """
-        Track end handler (SIGNAL ONLY).
-        DO NOT advance queue here.
+        Track end handler.
+
+        Engine owns queue progression.
         """
 
         player = payload.player
+
         if not player:
             return
 
         guild = getattr(player, "guild", None)
+
         if not guild:
             return
 
         state = music_manager.get_player(guild.id)
 
-        # clear current track ONLY
         state.current = None
 
-        # IMPORTANT:
-        # Let engine handle continuation
         try:
-            await engine.play_next(player)
+            await engine.handle_track_end(player)
+
         except Exception:
             logging.exception(
                 "[MUSIC] Failed advancing queue for guild %s",
