@@ -241,19 +241,20 @@ class MusicEngine:
     # =====================================================
     # SKIP
     # =====================================================
- #   async def skip(self, player: wavelink.Player):
-        guild_id = self._guild_id(player)
+#   async def skip(self, player: wavelink.Player):
+#       guild_id = self._guild_id(player)
+#
+#        state = music_manager.get_player(guild_id)
+#
+#        state.current = None
+#
+#        try:
+#            await player.stop()
+#        except Exception:
+#            pass
+#
+#        await self._play_next(player)
 
-        state = music_manager.get_player(guild_id)
-
-        state.current = None
-
-        try:
-            await player.stop()
-        except Exception:
-            pass
-
-        await self._play_next(player)
     async def skip(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
