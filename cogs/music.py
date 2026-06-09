@@ -52,28 +52,26 @@ class MusicCog(commands.Cog):
         if not tracks:
             return await interaction.followup.send("No results.")
 
-        primary = tracks[0]
+        # =====================================================
+        # ENQUEUE EVERYTHING THROUGH ENGINE (CRITICAL FIX)
+        # =====================================================
+        for track in tracks:
+            await engine.enqueue(player, track)
 
-        await engine.enqueue(player, primary)
-
-        state = music_manager.get_player(interaction.guild_id)
-
-        for t in tracks[1:3]:
-            state.queue.add(t)
-
+        # =====================================================
+        # START PLAYBACK
+        # =====================================================
         await engine.start(player)
 
         # =====================================================
-        # UI BOOTSTRAP
+        # UI INIT
         # =====================================================
-        if interaction.channel:
-            state.player_channel_id = interaction.channel.id
+        state = music_manager.get_player(interaction.guild_id)
+        state.player_channel_id = interaction.channel.id
 
         await player_message_manager.update(interaction.guild)
 
-        await interaction.followup.send(
-            f"🎵 Queued: **{primary.title}**"
-        )
+        await interaction.followup.send(f"🎵 Queued: **{tracks[0].title}** (+{len(tracks)-1})")
 
     # =====================================================
     @app_commands.command(name="stop")
