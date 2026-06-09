@@ -15,23 +15,20 @@ class MusicCog(commands.Cog):
         self.bot = bot
 
     # =====================================================
-    # INTERNAL: SAFE PLAYER GET
+    # PLAYER GET
     # =====================================================
     async def _get_player(self, interaction: discord.Interaction):
         if not interaction.guild:
-            raise RuntimeError("Guild only command")
+            return None
 
         voice_state = interaction.user.voice
-
         if not voice_state or not voice_state.channel:
             return None
 
-        channel = voice_state.channel
-
-        player: wavelink.Player = interaction.guild.voice_client
+        player = interaction.guild.voice_client
 
         if not player:
-            player = await channel.connect(cls=wavelink.Player)
+            player = await voice_state.channel.connect(cls=wavelink.Player)
 
         return player
 
@@ -55,22 +52,20 @@ class MusicCog(commands.Cog):
 
         primary = tracks[0]
 
-        # =====================================================
-        # ENGINE OWNED FLOW (UNCHANGED)
-        # =====================================================
+        # enqueue main
         await engine.enqueue(player, primary)
 
+        # add extras
         state = music_manager.get_player(interaction.guild_id)
-
         for t in tracks[1:3]:
             state.queue.add(t)
 
-        # 🔥 STEP 4 CHANGE:
-        # NO UI CALLS HERE ANYMORE
-        # engine is responsible for UI updates
+        # ONLY start if nothing is playing
+        if not state.current:
+            await engine._play_next(player)
 
         await interaction.followup.send(
-            content=f"🎵 Queued: **{primary.title}**"
+            f"🎵 Queued: **{primary.title}**"
         )
 
     # =====================================================
@@ -89,13 +84,7 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        # 🔥 STEP 4 CHANGE:
-        # removed UI update responsibility
-
-        await interaction.response.send_message(
-            "🛑 Stopped",
-            ephemeral=True
-        )
+        await interaction.response.send_message("🛑 Stopped", ephemeral=True)
 
     # =====================================================
     # SKIP
@@ -108,75 +97,8 @@ class MusicCog(commands.Cog):
         if player:
             await engine.skip(player)
 
-        # 🔥 STEP 4 CHANGE:
-        # removed UI update responsibility
-
-        await interaction.response.send_message(
-            "⏭ Skipped",
-            ephemeral=True
-        )
-
-    # =====================================================
-    # PAUSE
-    # =====================================================
-    @app_commands.command(name="pause")
-    async def pause(self, interaction: discord.Interaction):
-
-        player = interaction.guild.voice_client
-
-        if player:
-            try:
-                await player.pause(True)
-            except Exception:
-                pass
-
-        await interaction.response.send_message(
-            "⏸ Paused",
-            ephemeral=True
-        )
-
-    # =====================================================
-    # RESUME
-    # =====================================================
-    @app_commands.command(name="resume")
-    async def resume(self, interaction: discord.Interaction):
-
-        player = interaction.guild.voice_client
-
-        if player:
-            try:
-                await player.pause(False)
-            except Exception:
-                pass
-
-        await interaction.response.send_message(
-            "▶ Resumed",
-            ephemeral=True
-        )
-
-    # =====================================================
-    # QUEUE
-    # =====================================================
-    @app_commands.command(name="queue")
-    async def queue(self, interaction: discord.Interaction):
-
-        state = music_manager.get_player(interaction.guild_id)
-
-        tracks = state.queue.all()
-
-        if not tracks:
-            return await interaction.response.send_message("Queue empty.")
-
-        msg = "\n".join(
-            f"{i + 1}. {t.title}"
-            for i, t in enumerate(tracks[:10])
-        )
-
-        await interaction.response.send_message(msg)
+        await interaction.response.send_message("⏭ Skipped", ephemeral=True)
 
 
-# =====================================================
-# EXTENSION ENTRYPOINT
-# =====================================================
 async def setup(bot: commands.Bot):
     await bot.add_cog(MusicCog(bot))
