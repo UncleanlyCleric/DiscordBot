@@ -1,27 +1,42 @@
 import asyncio
+import time
 import wavelink
 
 from services.music.manager import music_manager
 
 
 class MusicEngine:
+    """
+    Phase 10.2 Live UI Engine
+
+    Adds:
+    - persistent UI update loop
+    - safe start/stop per guild
+    """
 
     IDLE_TIMEOUT = 15
 
     def __init__(self):
         self._locks: dict[int, asyncio.Lock] = {}
         self._idle_tasks: dict[int, asyncio.Task] = {}
-        self._skip_guard: set[int] = set()
+        self._ui_tasks: dict[int, asyncio.Task] = {}
 
+    # =====================================================
+    # GUILD RESOLVE
     # =====================================================
     def _guild_id(self, player: wavelink.Player) -> int:
         guild = getattr(player, "guild", None)
+
         if guild:
             return guild.id
+
         if hasattr(player, "_guild") and player._guild:
             return player._guild.id
+
         raise RuntimeError("Cannot resolve guild id")
 
+    # =====================================================
+    # LOCK
     # =====================================================
     def _lock(self, guild_id: int) -> asyncio.Lock:
         if guild_id not in self._locks:
@@ -29,12 +44,13 @@ class MusicEngine:
         return self._locks[guild_id]
 
     # =====================================================
+    # IDLE DISCONNECT
+    # =====================================================
     def _cancel_idle(self, guild_id: int):
         task = self._idle_tasks.pop(guild_id, None)
         if task and not task.done():
             task.cancel()
 
-    # =====================================================
     async def _idle_disconnect(self, player: wavelink.Player):
         await asyncio.sleep(self.IDLE_TIMEOUT)
 
@@ -50,32 +66,42 @@ class MusicEngine:
             pass
 
     # =====================================================
-    async def _notify_ui(self, player: wavelink.Player):
-        try:
-            from services.music.player_message_manager import player_message_manager
-            guild = player.guild
+    # UI LOOP (🔥 NEW CORE FEATURE)
+    # =====================================================
+    async def _ui_loop(self, guild_id: int, player: wavelink.Player):
+        from services.music.player_message_manager import player_message_manager
 
-            if not guild:
-                print("[UI] notify skipped: no guild")
+        while True:
+            try:
+                state = music_manager.get_player(guild_id)
+
+                if not state.current:
+                    return
+
+                guild = getattr(player, "guild", None)
+                if guild:
+                    await player_message_manager.update(guild)
+
+                await asyncio.sleep(5)
+
+            except Exception:
                 return
 
-            print("[UI] notify called")
-            await player_message_manager.update(guild)
-
-        except Exception as e:
-            print(f"[UI] notify error: {e}")
-
-    # =====================================================
-    async def enqueue(self, player: wavelink.Player, track):
+    def _start_ui_loop(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
-        state = music_manager.get_player(guild_id)
-        state.queue.add(track)
+        if guild_id not in self._ui_tasks or self._ui_tasks[guild_id].done():
+            self._ui_tasks[guild_id] = asyncio.create_task(
+                self._ui_loop(guild_id, player)
+            )
 
-        print(f"[QUEUE] added track -> {getattr(track, 'title', 'unknown')}")
+    def _stop_ui_loop(self, guild_id: int):
+        task = self._ui_tasks.pop(guild_id, None)
+        if task:
+            task.cancel()
 
-        self._cancel_idle(guild_id)
-
+    # =====================================================
+    # PLAY NEXT
     # =====================================================
     async def _play_next(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
@@ -87,19 +113,18 @@ class MusicEngine:
             track = state.queue.next()
 
             if not track:
-                print("[ENGINE] queue empty")
-
                 state.current = None
+
+                self._stop_ui_loop(guild_id)
 
                 if guild_id not in self._idle_tasks:
                     self._idle_tasks[guild_id] = asyncio.create_task(
                         self._idle_disconnect(player)
                     )
 
-                await self._notify_ui(player)
                 return
 
-            print(f"[ENGINE] playing -> {getattr(track, 'title', 'unknown')}")
+            self._cancel_idle(guild_id)
 
             state.current = track
 
@@ -112,54 +137,35 @@ class MusicEngine:
                     )
 
                     if not results:
-                        print("[ENGINE] no playable result")
                         return
 
                     playable = results[0]
 
                 await player.play(playable)
 
-                await self._notify_ui(player)
+                # 🔥 START LIVE UI LOOP HERE
+                self._start_ui_loop(player)
 
-            except Exception as e:
-                print(f"[ENGINE] play error: {e}")
+            except Exception:
                 state.current = None
                 await self._play_next(player)
 
     # =====================================================
-    async def handle_track_end(self, player: wavelink.Player):
-        guild_id = self._guild_id(player)
-
-        if guild_id in self._skip_guard:
-            print("[ENGINE] skip guard consumed")
-            self._skip_guard.discard(guild_id)
-            return
-
-        print("[ENGINE] track ended -> advancing")
-        await self._play_next(player)
-
+    # SKIP
     # =====================================================
     async def skip(self, player: wavelink.Player):
-        guild_id = self._guild_id(player)
-
-        print("[ENGINE] skip triggered")
-
-        self._skip_guard.add(guild_id)
-
         try:
             await player.stop()
         except Exception:
             pass
 
-        self._skip_guard.discard(guild_id)
-
         await self._play_next(player)
 
     # =====================================================
+    # STOP
+    # =====================================================
     async def stop(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
-
-        print("[ENGINE] stop triggered")
 
         state = music_manager.get_player(guild_id)
 
@@ -167,13 +173,12 @@ class MusicEngine:
         state.current = None
 
         self._cancel_idle(guild_id)
+        self._stop_ui_loop(guild_id)
 
         try:
             await player.stop()
         except Exception:
             pass
-
-        await self._notify_ui(player)
 
 
 engine = MusicEngine()
