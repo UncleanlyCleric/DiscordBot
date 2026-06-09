@@ -167,6 +167,7 @@ class MusicEngine:
 
         if guild_id in self._skip_guard:
             self._skip_guard.discard(guild_id)
+            return
 
         await self._play_next(player)
 
@@ -174,10 +175,18 @@ class MusicEngine:
     # SKIP
     # =====================================================
     async def skip(self, player: wavelink.Player):
+        guild_id = self._guild_id(player)
+
+        # mark skip so track_end doesn't double-fire logic
+        self._skip_guard.add(guild_id)
+
         try:
             await player.stop()
         except Exception:
             pass
+
+        # IMPORTANT: immediately force next track + UI
+        await self._play_next(player)
 
     # =====================================================
     # STOP
