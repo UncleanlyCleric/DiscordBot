@@ -1,194 +1,165 @@
-import discord
-from discord import app_commands
-from discord.ext import commands
+import time
+import logging
 
 import wavelink
 
-from services.music.resolver import music_resolver
 from services.music.manager import music_manager
-from services.music.player_engine import engine
-from services.music.player_message_manager import player_message_manager
 
-from services.music.ui.music_player_view import MusicPlayerView
-from services.music.now_playing import build_now_playing_embed
+class MusicEngine:
 
 
-class MusicCog(commands.Cog):
+# =====================================================
+# ENQUEUE
+# =====================================================
+async def enqueue(self, player: wavelink.Player, track):
 
-    def __init__(self, bot):
-        self.bot = bot
+    state = music_manager.get_player(player.guild.id)
 
-    # =====================================================
-    # PLAYER GET (CLEAN - NO ENGINE BINDING)
-    # =====================================================
-    async def _get_player(self, interaction: discord.Interaction):
+    state.queue.add(track)
 
-        if not interaction.guild:
-            raise RuntimeError("Guild only command")
+    logging.info(
+        "[MUSIC] Queued '%s' for guild %s",
+        getattr(track, "title", "Unknown"),
+        player.guild.id
+    )
 
-        voice_state = interaction.user.voice
+# =====================================================
+# START PLAYBACK IF IDLE
+# =====================================================
+async def start(self, player: wavelink.Player):
 
-        if not voice_state or not voice_state.channel:
-            return None
+    state = music_manager.get_player(player.guild.id)
 
-        channel = voice_state.channel
+    if state.current:
+        return
 
-        player: wavelink.Player = interaction.guild.voice_client
+    await self._play_next(player)
 
-        if not player:
-            player = await channel.connect(cls=wavelink.Player)
+# =====================================================
+# PLAY NEXT TRACK
+# =====================================================
+async def _play_next(self, player: wavelink.Player):
 
-        return player
+    state = music_manager.get_player(player.guild.id)
 
-    # =====================================================
-    # PLAY
-    # =====================================================
-    @app_commands.command(name="play")
-    async def play(self, interaction: discord.Interaction, query: str):
+    next_track = state.queue.next()
 
-        await interaction.response.defer()
+    if not next_track:
 
-        player = await self._get_player(interaction)
+        state.current = None
+        state.current_started_at = None
+        state.current_duration = None
 
-        if not player:
-            return await interaction.followup.send("Join a voice channel first.")
-
-        tracks = await music_resolver.resolve(query, interaction.user.id)
-
-        if not tracks:
-            return await interaction.followup.send("No results.")
-
-        primary = tracks[0]
-
-        # =====================================================
-        # ENGINE QUEUE FLOW
-        # =====================================================
-        await engine.enqueue(player, primary)
-
-        state = music_manager.get_player(interaction.guild_id)
-
-        for t in tracks[1:3]:
-            state.queue.add(t)
-
-        # START ONLY IF NEEDED
-        await engine.start(player)
-
-        # =====================================================
-        # UI BOOTSTRAP (FIXED + SAFE)
-        # =====================================================
-        state = music_manager.get_player(interaction.guild_id)
-
-        if not state.player_message_id and interaction.channel:
-
-            msg = await interaction.channel.send(
-                embed=build_now_playing_embed(state),
-                view=MusicPlayerView()
+        try:
+            from services.music.player_message_manager import (
+                player_message_manager
             )
 
-            state.player_message_id = msg.id
-            state.player_channel_id = interaction.channel.id
+            await player_message_manager.update(player.guild)
 
-        else:
-            await player_message_manager.update(interaction.guild)
+        except Exception:
+            logging.exception(
+                "[MUSIC] Failed UI update after queue empty"
+            )
 
-        await interaction.followup.send(
-            content=f"🎵 Queued: **{primary.title}**"
+        return
+
+    state.current = next_track
+
+    state.current_started_at = time.time()
+
+    duration = getattr(
+        getattr(next_track, "playable", None),
+        "length",
+        None
+    )
+
+    state.current_duration = duration
+
+    try:
+        await player.play(next_track.playable)
+
+        logging.info(
+            "[MUSIC] Playing '%s' in guild %s",
+            next_track.title,
+            player.guild.id
         )
 
-    # =====================================================
-    # STOP
-    # =====================================================
-    @app_commands.command(name="stop")
-    async def stop(self, interaction: discord.Interaction):
+    except Exception:
 
-        player = interaction.guild.voice_client
-
-        if player:
-            await engine.stop(player)
-
-            try:
-                await player.disconnect()
-            except Exception:
-                pass
-
-        await player_message_manager.update(interaction.guild)
-
-        await interaction.response.send_message("🛑 Stopped", ephemeral=True)
-
-    # =====================================================
-    # SKIP
-    # =====================================================
-    @app_commands.command(name="skip")
-    async def skip(self, interaction: discord.Interaction):
-
-        player = interaction.guild.voice_client
-
-        if player:
-            await engine.skip(player)
-
-        await player_message_manager.update(interaction.guild)
-
-        await interaction.response.send_message("⏭ Skipped", ephemeral=True)
-
-    # =====================================================
-    # PAUSE
-    # =====================================================
-    @app_commands.command(name="pause")
-    async def pause(self, interaction: discord.Interaction):
-
-        player = interaction.guild.voice_client
-
-        if player:
-            try:
-                await player.pause(True)
-            except Exception:
-                pass
-
-        await player_message_manager.update(interaction.guild)
-
-        await interaction.response.send_message("⏸ Paused", ephemeral=True)
-
-    # =====================================================
-    # RESUME
-    # =====================================================
-    @app_commands.command(name="resume")
-    async def resume(self, interaction: discord.Interaction):
-
-        player = interaction.guild.voice_client
-
-        if player:
-            try:
-                await player.pause(False)
-            except Exception:
-                pass
-
-        await player_message_manager.update(interaction.guild)
-
-        await interaction.response.send_message("▶ Resumed", ephemeral=True)
-
-    # =====================================================
-    # QUEUE
-    # =====================================================
-    @app_commands.command(name="queue")
-    async def queue(self, interaction: discord.Interaction):
-
-        state = music_manager.get_player(interaction.guild_id)
-
-        tracks = state.queue.all()
-
-        if not tracks:
-            return await interaction.response.send_message("Queue empty.")
-
-        msg = "\n".join(
-            f"{i + 1}. {t.title}"
-            for i, t in enumerate(tracks[:10])
+        logging.exception(
+            "[MUSIC] Failed playing '%s'",
+            next_track.title
         )
 
-        await interaction.response.send_message(msg)
+        state.current = None
 
+        await self._play_next(player)
+        return
+
+    try:
+        from services.music.player_message_manager import (
+            player_message_manager
+        )
+
+        await player_message_manager.update(player.guild)
+
+    except Exception:
+        logging.exception(
+            "[MUSIC] Failed UI update after play"
+        )
 
 # =====================================================
-# EXTENSION ENTRYPOINT
+# SKIP
 # =====================================================
-async def setup(bot: commands.Bot):
-    await bot.add_cog(MusicCog(bot))
+async def skip(self, player: wavelink.Player):
+
+    state = music_manager.get_player(player.guild.id)
+
+    state.current = None
+    state.current_started_at = None
+    state.current_duration = None
+
+    try:
+        await player.skip(force=True)
+
+    except Exception:
+
+        try:
+            await player.stop()
+        except Exception:
+            pass
+
+# =====================================================
+# STOP
+# =====================================================
+async def stop(self, player: wavelink.Player):
+
+    state = music_manager.get_player(player.guild.id)
+
+    state.queue.clear()
+
+    state.current = None
+    state.current_started_at = None
+    state.current_duration = None
+
+    try:
+        await player.stop()
+
+    except Exception:
+        pass
+
+    try:
+        from services.music.player_message_manager import (
+            player_message_manager
+        )
+
+        await player_message_manager.update(player.guild)
+
+    except Exception:
+        logging.exception(
+            "[MUSIC] Failed UI update after stop"
+        )
+
+
+engine = MusicEngine()
