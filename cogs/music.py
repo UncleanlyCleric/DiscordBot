@@ -7,7 +7,6 @@ import wavelink
 from services.music.resolver import music_resolver
 from services.music.manager import music_manager
 from services.music.player_engine import engine
-from services.music.player_message_manager import player_message_manager
 
 
 class MusicCog(commands.Cog):
@@ -16,7 +15,7 @@ class MusicCog(commands.Cog):
         self.bot = bot
 
     # =====================================================
-    # PLAYER GET
+    # INTERNAL: SAFE PLAYER GET
     # =====================================================
     async def _get_player(self, interaction: discord.Interaction):
         if not interaction.guild:
@@ -56,6 +55,9 @@ class MusicCog(commands.Cog):
 
         primary = tracks[0]
 
+        # =====================================================
+        # ENGINE OWNED FLOW (UNCHANGED)
+        # =====================================================
         await engine.enqueue(player, primary)
 
         state = music_manager.get_player(interaction.guild_id)
@@ -63,7 +65,9 @@ class MusicCog(commands.Cog):
         for t in tracks[1:3]:
             state.queue.add(t)
 
-        await engine._play_next(player)
+        # 🔥 STEP 4 CHANGE:
+        # NO UI CALLS HERE ANYMORE
+        # engine is responsible for UI updates
 
         await interaction.followup.send(
             content=f"🎵 Queued: **{primary.title}**"
@@ -85,7 +89,13 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await interaction.response.send_message("🛑 Stopped", ephemeral=True)
+        # 🔥 STEP 4 CHANGE:
+        # removed UI update responsibility
+
+        await interaction.response.send_message(
+            "🛑 Stopped",
+            ephemeral=True
+        )
 
     # =====================================================
     # SKIP
@@ -98,7 +108,13 @@ class MusicCog(commands.Cog):
         if player:
             await engine.skip(player)
 
-        await interaction.response.send_message("⏭ Skipped", ephemeral=True)
+        # 🔥 STEP 4 CHANGE:
+        # removed UI update responsibility
+
+        await interaction.response.send_message(
+            "⏭ Skipped",
+            ephemeral=True
+        )
 
     # =====================================================
     # PAUSE
@@ -114,7 +130,10 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await interaction.response.send_message("⏸ Paused", ephemeral=True)
+        await interaction.response.send_message(
+            "⏸ Paused",
+            ephemeral=True
+        )
 
     # =====================================================
     # RESUME
@@ -130,7 +149,10 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await interaction.response.send_message("▶ Resumed", ephemeral=True)
+        await interaction.response.send_message(
+            "▶ Resumed",
+            ephemeral=True
+        )
 
     # =====================================================
     # QUEUE
@@ -153,5 +175,8 @@ class MusicCog(commands.Cog):
         await interaction.response.send_message(msg)
 
 
+# =====================================================
+# EXTENSION ENTRYPOINT
+# =====================================================
 async def setup(bot: commands.Bot):
     await bot.add_cog(MusicCog(bot))

@@ -1,4 +1,14 @@
 import discord
+import time
+
+def _progress_bar(current: float, total: float, size: int = 12):
+    if not total:
+        return "▬" * size
+
+    ratio = min(max(current / total, 0), 1)
+    filled = int(ratio * size)
+
+    return "▰" * filled + "▱" * (size - filled)
 
 
 def build_now_playing_embed(state):
@@ -8,69 +18,50 @@ def build_now_playing_embed(state):
         color=discord.Color.blurple()
     )
 
-    if state.current:
+    track = state.current
 
+    if not track:
         embed.add_field(
             name="Track",
-            value=state.current.title,
+            value="Nothing playing",
             inline=False
         )
+        return embed
 
-        if getattr(state.current, "author", None):
-            embed.add_field(
-                name="Artist",
-                value=state.current.author,
-                inline=True
-            )
+    embed.add_field(
+        name="Track",
+        value=track.title,
+        inline=False
+    )
 
-        if getattr(state.current, "requester_id", None):
-            embed.add_field(
-                name="Requested By",
-                value=f"<@{state.current.requester_id}>",
-                inline=True
-            )
-
-        thumbnail = getattr(
-            state.current.playable,
-            "artwork",
-            None
+    if getattr(track, "author", None):
+        embed.add_field(
+            name="Artist",
+            value=track.author,
+            inline=True
         )
 
-        if thumbnail:
-            embed.set_thumbnail(url=thumbnail)
+    # =====================================================
+    # LIVE PROGRESS (🔥 NEW)
+    # =====================================================
+    started = getattr(state, "current_started_at", None)
+    duration = getattr(track, "length", None)
 
-    else:
+    if started and duration:
+        elapsed = (time.time() - started) * 1000
+
+        bar = _progress_bar(elapsed, duration)
 
         embed.add_field(
-            name="Track",
-            value="Nothing currently playing",
+            name="Progress",
+            value=f"`{bar}`",
             inline=False
         )
-
-    queue = state.queue.all()
 
     embed.add_field(
         name="Queue",
-        value=str(len(queue)),
+        value=str(len(state.queue)),
         inline=True
     )
-
-    if queue:
-
-        preview = "\n".join(
-            f"{i + 1}. {track.title}"
-            for i, track in enumerate(queue[:5])
-        )
-
-        embed.add_field(
-            name="Up Next",
-            value=preview,
-            inline=False
-        )
-
-        if len(queue) > 5:
-            embed.set_footer(
-                text=f"+{len(queue) - 5} more tracks queued"
-            )
 
     return embed
