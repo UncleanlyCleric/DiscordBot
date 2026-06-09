@@ -129,5 +129,26 @@ class MusicEngine:
         except Exception:
             pass
 
+    # =====================================================
+    # Desync Fix
+    # =====================================================
+    # This function is called when a track ends, and it's used to fix desynchronization issues.
+    async def handle_track_end(self, player: wavelink.Player):
+        import logging
+
+        logging.info(
+            "[MUSIC] handle_track_end() guild=%s",
+            getattr(player.guild, "id", None)
+        )
+
+        state = music_manager.get_player(player.guild.id)
+
+        # reset current
+        state.current = None
+        state.current_started_at = None
+        state.current_duration = None
+
+        # IMPORTANT: continue queue
+        await self._play_next(player)
 
 engine = MusicEngine()
