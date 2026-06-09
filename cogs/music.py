@@ -63,10 +63,17 @@ class MusicCog(commands.Cog):
 
         await engine.start(player)
 
-        # UI update (engine will also trigger later updates)
+        # =====================================================
+        # UI BOOTSTRAP
+        # =====================================================
+        if interaction.channel:
+            state.player_channel_id = interaction.channel.id
+
         await player_message_manager.update(interaction.guild)
 
-        await interaction.followup.send(f"🎵 Queued: **{primary.title}**")
+        await interaction.followup.send(
+            f"🎵 Queued: **{primary.title}**"
+        )
 
     # =====================================================
     @app_commands.command(name="stop")
@@ -84,7 +91,10 @@ class MusicCog(commands.Cog):
 
         await player_message_manager.update(interaction.guild)
 
-        await interaction.response.send_message("🛑 Stopped", ephemeral=True)
+        await interaction.response.send_message(
+            "🛑 Stopped",
+            ephemeral=True
+        )
 
     # =====================================================
     @app_commands.command(name="skip")
@@ -97,7 +107,10 @@ class MusicCog(commands.Cog):
 
         await player_message_manager.update(interaction.guild)
 
-        await interaction.response.send_message("⏭ Skipped", ephemeral=True)
+        await interaction.response.send_message(
+            "⏭ Skipped",
+            ephemeral=True
+        )
 
     # =====================================================
     @app_commands.command(name="pause")
@@ -113,7 +126,10 @@ class MusicCog(commands.Cog):
 
         await player_message_manager.update(interaction.guild)
 
-        await interaction.response.send_message("⏸ Paused", ephemeral=True)
+        await interaction.response.send_message(
+            "⏸ Paused",
+            ephemeral=True
+        )
 
     # =====================================================
     @app_commands.command(name="resume")
@@ -129,7 +145,10 @@ class MusicCog(commands.Cog):
 
         await player_message_manager.update(interaction.guild)
 
-        await interaction.response.send_message("▶ Resumed", ephemeral=True)
+        await interaction.response.send_message(
+            "▶ Resumed",
+            ephemeral=True
+        )
 
     # =====================================================
     @app_commands.command(name="queue")
@@ -140,7 +159,9 @@ class MusicCog(commands.Cog):
         tracks = state.queue.all()
 
         if not tracks:
-            return await interaction.response.send_message("Queue empty.")
+            return await interaction.response.send_message(
+                "Queue empty."
+            )
 
         msg = "\n".join(
             f"{i + 1}. {t.title}"
