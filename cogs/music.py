@@ -8,8 +8,6 @@ from services.music.resolver import music_resolver
 from services.music.manager import music_manager
 from services.music.player_engine import engine
 from services.music.player_message_manager import player_message_manager
-from services.music.now_playing import build_now_playing_embed
-from services.music.ui.music_player_view import MusicPlayerView
 
 
 class MusicCog(commands.Cog):
@@ -60,21 +58,11 @@ class MusicCog(commands.Cog):
         for t in tracks[1:3]:
             state.queue.add(t)
 
-        # =====================================================
-        # 🔥 FIXED UI BOOTSTRAP (NO BROKEN CALLS)
-        # =====================================================
-        if interaction.channel and not state.player_message_id:
+        # start playback safely (ONLY if nothing playing)
+        if not state.current:
+            await engine._play_next(player)
 
-            msg = await interaction.channel.send(
-                embed=build_now_playing_embed(state),
-                view=MusicPlayerView()
-            )
-
-            state.player_message_id = msg.id
-            state.player_channel_id = interaction.channel.id
-
-        else:
-            await player_message_manager.update(interaction.guild)
+        await player_message_manager.update(interaction.guild)
 
         await interaction.followup.send(
             content=f"🎵 Queued: **{primary.title}**"
@@ -94,6 +82,8 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
+        await player_message_manager.update(interaction.guild)
+
         await interaction.response.send_message("🛑 Stopped", ephemeral=True)
 
     # =====================================================
@@ -105,8 +95,6 @@ class MusicCog(commands.Cog):
         if player:
             await engine.skip(player)
 
+        await player_message_manager.update(interaction.guild)
+
         await interaction.response.send_message("⏭ Skipped", ephemeral=True)
-
-
-async def setup(bot: commands.Bot):
-    await bot.add_cog(MusicCog(bot))
