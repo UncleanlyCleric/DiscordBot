@@ -8,19 +8,12 @@ from services.music.resolver import music_resolver
 from services.music.manager import music_manager
 from services.music.player_engine import engine
 
-from services.music.player_message_manager import player_message_manager
-from services.music.ui.music_player_view import MusicPlayerView
-from services.music.now_playing import build_now_playing_embed
-
 
 class MusicCog(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
 
-    # =====================================================
-    # INTERNAL: SAFE PLAYER GET
-    # =====================================================
     async def _get_player(self, interaction: discord.Interaction):
         if not interaction.guild:
             raise RuntimeError("Guild only command")
@@ -40,25 +33,15 @@ class MusicCog(commands.Cog):
         return player
 
     # =====================================================
-    # PLAY
-    # =====================================================
     @app_commands.command(name="play")
     async def play(self, interaction: discord.Interaction, query: str):
-
-        if not interaction.guild:
-            return await interaction.response.send_message(
-                "Guild only command.",
-                ephemeral=True
-            )
 
         await interaction.response.defer()
 
         player = await self._get_player(interaction)
 
         if not player:
-            return await interaction.followup.send(
-                "Join a voice channel first."
-            )
+            return await interaction.followup.send("Join a voice channel first.")
 
         tracks = await music_resolver.resolve(query, interaction.user.id)
 
@@ -67,9 +50,6 @@ class MusicCog(commands.Cog):
 
         primary = tracks[0]
 
-        # =====================================================
-        # ENGINE FLOW
-        # =====================================================
         await engine.enqueue(player, primary)
 
         state = music_manager.get_player(interaction.guild_id)
@@ -77,34 +57,12 @@ class MusicCog(commands.Cog):
         for t in tracks[1:3]:
             state.queue.add(t)
 
-        await engine.start(player)
-
-        # =====================================================
-        # UI CREATION GUARANTEE (ONLY ONCE)
-        # =====================================================
-        state = music_manager.get_player(interaction.guild_id)
-
-        if not state.player_message_id and interaction.channel:
-
-            msg = await interaction.channel.send(
-                embed=build_now_playing_embed(state),
-                view=MusicPlayerView()
-            )
-
-            state.player_message_id = msg.id
-            state.player_channel_id = interaction.channel.id
-
-        else:
-            # FIX: signature corrected (guild ONLY)
-            if interaction.guild:
-                await player_message_manager.update(interaction.guild)
+        # 🚫 NO UI CALLS HERE (engine owns UI now)
 
         await interaction.followup.send(
             content=f"🎵 Queued: **{primary.title}**"
         )
 
-    # =====================================================
-    # STOP
     # =====================================================
     @app_commands.command(name="stop")
     async def stop(self, interaction: discord.Interaction):
@@ -119,17 +77,8 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        # FIX: corrected update signature
-        if interaction.guild:
-            await player_message_manager.update(interaction.guild)
+        await interaction.response.send_message("🛑 Stopped", ephemeral=True)
 
-        await interaction.response.send_message(
-            "🛑 Stopped",
-            ephemeral=True
-        )
-
-    # =====================================================
-    # SKIP
     # =====================================================
     @app_commands.command(name="skip")
     async def skip(self, interaction: discord.Interaction):
@@ -139,17 +88,8 @@ class MusicCog(commands.Cog):
         if player:
             await engine.skip(player)
 
-        # FIX: corrected update signature
-        if interaction.guild:
-            await player_message_manager.update(interaction.guild)
+        await interaction.response.send_message("⏭ Skipped", ephemeral=True)
 
-        await interaction.response.send_message(
-            "⏭ Skipped",
-            ephemeral=True
-        )
-
-    # =====================================================
-    # PAUSE
     # =====================================================
     @app_commands.command(name="pause")
     async def pause(self, interaction: discord.Interaction):
@@ -162,16 +102,8 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        if interaction.guild:
-            await player_message_manager.update(interaction.guild)
+        await interaction.response.send_message("⏸ Paused", ephemeral=True)
 
-        await interaction.response.send_message(
-            "⏸ Paused",
-            ephemeral=True
-        )
-
-    # =====================================================
-    # RESUME
     # =====================================================
     @app_commands.command(name="resume")
     async def resume(self, interaction: discord.Interaction):
@@ -184,16 +116,8 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        if interaction.guild:
-            await player_message_manager.update(interaction.guild)
+        await interaction.response.send_message("▶ Resumed", ephemeral=True)
 
-        await interaction.response.send_message(
-            "▶ Resumed",
-            ephemeral=True
-        )
-
-    # =====================================================
-    # QUEUE
     # =====================================================
     @app_commands.command(name="queue")
     async def queue(self, interaction: discord.Interaction):
@@ -213,8 +137,5 @@ class MusicCog(commands.Cog):
         await interaction.response.send_message(msg)
 
 
-# =====================================================
-# EXTENSION ENTRYPOINT
-# =====================================================
 async def setup(bot: commands.Bot):
     await bot.add_cog(MusicCog(bot))
