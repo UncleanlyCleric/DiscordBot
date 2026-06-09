@@ -7,10 +7,7 @@ import wavelink
 from services.music.resolver import music_resolver
 from services.music.manager import music_manager
 from services.music.player_engine import engine
-
 from services.music.player_message_manager import player_message_manager
-from services.music.ui.music_player_view import MusicPlayerView
-from services.music.now_playing import build_now_playing_embed
 
 
 class MusicCog(commands.Cog):
@@ -52,26 +49,21 @@ class MusicCog(commands.Cog):
         if not tracks:
             return await interaction.followup.send("No results.")
 
-        # =====================================================
-        # ENQUEUE EVERYTHING THROUGH ENGINE (CRITICAL FIX)
-        # =====================================================
-        for track in tracks:
-            await engine.enqueue(player, track)
+        # FIX: enqueue ALL via engine
+        await engine.enqueue_many(player, tracks)
 
-        # =====================================================
         # START PLAYBACK
-        # =====================================================
         await engine.start(player)
 
-        # =====================================================
-        # UI INIT
-        # =====================================================
+        # UI bootstrap
         state = music_manager.get_player(interaction.guild_id)
         state.player_channel_id = interaction.channel.id
 
         await player_message_manager.update(interaction.guild)
 
-        await interaction.followup.send(f"🎵 Queued: **{tracks[0].title}** (+{len(tracks)-1})")
+        await interaction.followup.send(
+            f"🎵 Queued: **{tracks[0].title}** (+{len(tracks)-1})"
+        )
 
     # =====================================================
     @app_commands.command(name="stop")
@@ -89,10 +81,7 @@ class MusicCog(commands.Cog):
 
         await player_message_manager.update(interaction.guild)
 
-        await interaction.response.send_message(
-            "🛑 Stopped",
-            ephemeral=True
-        )
+        await interaction.response.send_message("🛑 Stopped", ephemeral=True)
 
     # =====================================================
     @app_commands.command(name="skip")
@@ -105,10 +94,7 @@ class MusicCog(commands.Cog):
 
         await player_message_manager.update(interaction.guild)
 
-        await interaction.response.send_message(
-            "⏭ Skipped",
-            ephemeral=True
-        )
+        await interaction.response.send_message("⏭ Skipped", ephemeral=True)
 
     # =====================================================
     @app_commands.command(name="pause")
@@ -124,10 +110,7 @@ class MusicCog(commands.Cog):
 
         await player_message_manager.update(interaction.guild)
 
-        await interaction.response.send_message(
-            "⏸ Paused",
-            ephemeral=True
-        )
+        await interaction.response.send_message("⏸ Paused", ephemeral=True)
 
     # =====================================================
     @app_commands.command(name="resume")
@@ -143,10 +126,7 @@ class MusicCog(commands.Cog):
 
         await player_message_manager.update(interaction.guild)
 
-        await interaction.response.send_message(
-            "▶ Resumed",
-            ephemeral=True
-        )
+        await interaction.response.send_message("▶ Resumed", ephemeral=True)
 
     # =====================================================
     @app_commands.command(name="queue")
@@ -157,9 +137,7 @@ class MusicCog(commands.Cog):
         tracks = state.queue.all()
 
         if not tracks:
-            return await interaction.response.send_message(
-                "Queue empty."
-            )
+            return await interaction.response.send_message("Queue empty.")
 
         msg = "\n".join(
             f"{i + 1}. {t.title}"
