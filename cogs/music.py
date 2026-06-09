@@ -15,10 +15,17 @@ class MusicCog(commands.Cog):
         self.bot = bot
 
     # =====================================================
-    # INTERNAL: GET OR CREATE PLAYER
+    # INTERNAL: SAFE PLAYER GET
     # =====================================================
     async def _get_player(self, interaction: discord.Interaction):
-        channel = interaction.user.voice.channel
+        if not interaction.guild:
+            raise RuntimeError("Guild only command")
+
+        voice_state = interaction.user.voice
+        if not voice_state or not voice_state.channel:
+            return None
+
+        channel = voice_state.channel
 
         player: wavelink.Player = interaction.guild.voice_client
 
@@ -28,39 +35,41 @@ class MusicCog(commands.Cog):
         return player
 
     # =====================================================
-    # PLAY (FIXED: NO MULTI-SPAM ENQUEUE)
+    # PLAY (ENGINE CONTROLLED)
     # =====================================================
     @app_commands.command(name="play")
     async def play(self, interaction: discord.Interaction, query: str):
 
         await interaction.response.defer()
 
-        if not interaction.user.voice or not interaction.user.voice.channel:
-            return await interaction.followup.send("Join a voice channel.")
+        if not interaction.guild:
+            return await interaction.followup.send("Guild only command.")
 
         player = await self._get_player(interaction)
+
+        if not player:
+            return await interaction.followup.send("Join a voice channel first.")
 
         tracks = await music_resolver.resolve(query, interaction.user.id)
 
         if not tracks:
             return await interaction.followup.send("No results.")
 
-        # -------------------------------------------------
-        # SMART QUEUE STRATEGY (IMPORTANT FIX)
-        # -------------------------------------------------
         primary = tracks[0]
 
-        # Only queue FIRST track immediately
+        # =====================================================
+        # ENGINE OWNED FLOW
+        # =====================================================
         await engine.enqueue(player, primary)
 
-        # Optional: queue next few WITHOUT triggering playback spam
+        # optional light prefetch (NO playback spam)
         for t in tracks[1:3]:
             await engine.enqueue(player, t)
 
         await interaction.followup.send(f"🎵 Queued: **{primary.title}**")
 
     # =====================================================
-    # STOP (ENGINE OWNED)
+    # STOP
     # =====================================================
     @app_commands.command(name="stop")
     async def stop(self, interaction: discord.Interaction):
@@ -78,7 +87,7 @@ class MusicCog(commands.Cog):
         await interaction.response.send_message("🛑 Stopped", ephemeral=True)
 
     # =====================================================
-    # SKIP (ENGINE OWNED)
+    # SKIP
     # =====================================================
     @app_commands.command(name="skip")
     async def skip(self, interaction: discord.Interaction):
@@ -123,7 +132,7 @@ class MusicCog(commands.Cog):
         await interaction.response.send_message("▶ Resumed", ephemeral=True)
 
     # =====================================================
-    # QUEUE (SAFE READ ONLY)
+    # QUEUE (READ ONLY SAFE)
     # =====================================================
     @app_commands.command(name="queue")
     async def queue(self, interaction: discord.Interaction):
