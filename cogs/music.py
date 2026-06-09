@@ -197,3 +197,6 @@ class MusicCog(commands.Cog):
         )
 
         await interaction.response.send_message(msg)
+        
+async def setup(bot: commands.Bot):
+    await bot.add_cog(MusicCog(bot))
