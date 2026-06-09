@@ -117,11 +117,11 @@ class MusicEngine:
         except Exception:
             pass
 
-    # =====================================================
-    # IMPORTANT FIX:
-    # explicitly advance queue AFTER stop
-    # =====================================================
-    await self._play_next(player)
+        # =====================================================
+        # IMPORTANT FIX:
+        # explicitly advance queue AFTER stop
+        # =====================================================
+        await self._play_next(player)
 
     # =====================================================
     # STOP
