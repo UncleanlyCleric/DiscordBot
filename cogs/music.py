@@ -8,11 +8,13 @@ from services.music.resolver import music_resolver
 from services.music.manager import music_manager
 from services.music.player_engine import engine
 
-from services.music.now_playing import build_now_playing_embed
-from services.music.ui.music_player_view import MusicPlayerView
+from services.music.player_message_manager import (
+    player_message_manager
+)
+
 
 class MusicCog(commands.Cog):
-    
+
     def __init__(self, bot):
         self.bot = bot
 
@@ -24,6 +26,7 @@ class MusicCog(commands.Cog):
             raise RuntimeError("Guild only command")
 
         voice_state = interaction.user.voice
+
         if not voice_state or not voice_state.channel:
             return None
 
@@ -32,44 +35,63 @@ class MusicCog(commands.Cog):
         player: wavelink.Player = interaction.guild.voice_client
 
         if not player:
-            player = await channel.connect(cls=wavelink.Player)
+            player = await channel.connect(
+                cls=wavelink.Player
+            )
 
         return player
 
     # =====================================================
-    # PLAY (ENGINE CONTROLLED)
+    # PLAY
     # =====================================================
     @app_commands.command(name="play")
-    async def play(self, interaction: discord.Interaction, query: str):
-
+    async def play(
+        self,
+        interaction: discord.Interaction,
+        query: str
+    ):
         await interaction.response.defer()
 
         if not interaction.guild:
-            return await interaction.followup.send("Guild only command.")
+            return await interaction.followup.send(
+                "Guild only command."
+            )
 
         player = await self._get_player(interaction)
 
         if not player:
-            return await interaction.followup.send("Join a voice channel first.")
+            return await interaction.followup.send(
+                "Join a voice channel first."
+            )
 
-        tracks = await music_resolver.resolve(query, interaction.user.id)
+        tracks = await music_resolver.resolve(
+            query,
+            interaction.user.id
+        )
 
         if not tracks:
-            return await interaction.followup.send("No results.")
+            return await interaction.followup.send(
+                "No results."
+            )
 
         primary = tracks[0]
 
-        # ENGINE OWNED FLOW
-        await engine.enqueue(player, primary)
-
-        await self._update_player_message(
-            interaction
+        await engine.enqueue(
+            player,
+            primary
         )
 
         for t in tracks[1:3]:
-            await engine.enqueue(player, t)
+            await engine.enqueue(
+                player,
+                t
+            )
 
-        # ✅ FIX: NO view=None anywhere
+        await player_message_manager.update(
+            interaction.guild,
+            interaction.channel
+        )
+
         await interaction.followup.send(
             content=f"🎵 Queued: **{primary.title}**"
         )
@@ -78,8 +100,10 @@ class MusicCog(commands.Cog):
     # STOP
     # =====================================================
     @app_commands.command(name="stop")
-    async def stop(self, interaction: discord.Interaction):
-
+    async def stop(
+        self,
+        interaction: discord.Interaction
+    ):
         player = interaction.guild.voice_client
 
         if player:
@@ -90,27 +114,47 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await interaction.response.send_message("🛑 Stopped", ephemeral=True)
+        await player_message_manager.update(
+            interaction.guild,
+            interaction.channel
+        )
+
+        await interaction.response.send_message(
+            "🛑 Stopped",
+            ephemeral=True
+        )
 
     # =====================================================
     # SKIP
     # =====================================================
     @app_commands.command(name="skip")
-    async def skip(self, interaction: discord.Interaction):
-
+    async def skip(
+        self,
+        interaction: discord.Interaction
+    ):
         player = interaction.guild.voice_client
 
         if player:
             await engine.skip(player)
 
-        await interaction.response.send_message("⏭ Skipped", ephemeral=True)
+        await player_message_manager.update(
+            interaction.guild,
+            interaction.channel
+        )
+
+        await interaction.response.send_message(
+            "⏭ Skipped",
+            ephemeral=True
+        )
 
     # =====================================================
     # PAUSE
     # =====================================================
     @app_commands.command(name="pause")
-    async def pause(self, interaction: discord.Interaction):
-
+    async def pause(
+        self,
+        interaction: discord.Interaction
+    ):
         player = interaction.guild.voice_client
 
         if player:
@@ -119,14 +163,24 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await interaction.response.send_message("⏸ Paused", ephemeral=True)
+        await player_message_manager.update(
+            interaction.guild,
+            interaction.channel
+        )
+
+        await interaction.response.send_message(
+            "⏸ Paused",
+            ephemeral=True
+        )
 
     # =====================================================
     # RESUME
     # =====================================================
     @app_commands.command(name="resume")
-    async def resume(self, interaction: discord.Interaction):
-
+    async def resume(
+        self,
+        interaction: discord.Interaction
+    ):
         player = interaction.guild.voice_client
 
         if player:
@@ -135,29 +189,21 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await interaction.response.send_message("▶ Resumed", ephemeral=True)
+        await player_message_manager.update(
+            interaction.guild,
+            interaction.channel
+        )
+
+        await interaction.response.send_message(
+            "▶ Resumed",
+            ephemeral=True
+        )
 
     # =====================================================
     # QUEUE
     # =====================================================
     @app_commands.command(name="queue")
-    async def queue(self, interaction: discord.Interaction):
-
-        state = music_manager.get_player(interaction.guild_id)
-
-        tracks = state.queue.all()
-
-        if not tracks:
-            return await interaction.response.send_message("Queue empty.")
-
-        msg = "\n".join(
-            f"{i+1}. {t.title}"
-            for i, t in enumerate(tracks[:10])
-        )
-
-        await interaction.response.send_message(msg)
-
-    async def _update_player_message(
+    async def queue(
         self,
         interaction: discord.Interaction
     ):
@@ -165,48 +211,23 @@ class MusicCog(commands.Cog):
             interaction.guild_id
         )
 
-        embed = build_now_playing_embed(state)
+        tracks = state.queue.all()
 
-        channel = interaction.channel
-
-        if channel is None:
-            return
-
-        if not state.player_message_id:
-
-            msg = await channel.send(
-                embed=embed,
-                view=MusicPlayerView()
+        if not tracks:
+            return await interaction.response.send_message(
+                "Queue empty."
             )
 
-            state.player_message_id = msg.id
-            state.player_channel_id = channel.id
+        msg = "\n".join(
+            f"{i + 1}. {t.title}"
+            for i, t in enumerate(tracks[:10])
+        )
 
-            return
+        await interaction.response.send_message(msg)
 
-        try:
-            msg = await channel.fetch_message(
-                state.player_message_id
-            )
-
-            await msg.edit(
-                embed=embed,
-                view=MusicPlayerView()
-            )
-
-        except Exception:
-
-            msg = await channel.send(
-                embed=embed,
-                view=MusicPlayerView()
-            )
-
-            state.player_message_id = msg.id
-            state.player_channel_id = channel.id
-            
 
 # =====================================================
-# FIX: REQUIRED EXTENSION ENTRYPOINT
+# EXTENSION ENTRYPOINT
 # =====================================================
 async def setup(bot: commands.Bot):
     await bot.add_cog(MusicCog(bot))
