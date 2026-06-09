@@ -6,13 +6,12 @@ from services.music.manager import music_manager
 
 class MusicEngine:
     """
-    Phase 9 Music Engine (Stable Playback Core)
+    Phase 10 Music Engine (Production Stable State Machine)
 
-    Goals:
-    - deterministic queue progression
-    - no double-advance (skip vs track_end safe)
-    - safe idle disconnect
-    - clean state transitions
+    Guarantees:
+    - single source of truth for playback
+    - no race between skip / track_end
+    - safe idle + autoplay hook
     """
 
     IDLE_TIMEOUT = 15
@@ -21,8 +20,8 @@ class MusicEngine:
         self._locks: dict[int, asyncio.Lock] = {}
         self._idle_tasks: dict[int, asyncio.Task] = {}
 
-        # prevents race between skip and track_end
-        self._skip_flag: set[int] = set()
+        # prevents double advancement (skip vs track_end)
+        self._skip_guard: set[int] = set()
 
     # =====================================================
     # GUILD RESOLVE
@@ -36,7 +35,7 @@ class MusicEngine:
         if hasattr(player, "_guild") and player._guild:
             return player._guild.id
 
-        raise RuntimeError("Cannot resolve guild id from player")
+        raise RuntimeError("Cannot resolve guild id")
 
     # =====================================================
     # LOCK
@@ -61,12 +60,11 @@ class MusicEngine:
             guild_id = self._guild_id(player)
             state = music_manager.get_player(guild_id)
 
-            # still active? abort
+            # still active → abort
             if state.current or state.queue.all():
                 return
 
             await player.disconnect()
-
             print(f"[ENGINE] Idle disconnect guild={guild_id}")
 
         except Exception:
@@ -93,7 +91,7 @@ class MusicEngine:
             await self._play_next(player)
 
     # =====================================================
-    # PLAY NEXT (CORE)
+    # CORE PLAYBACK
     # =====================================================
     async def _play_next(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
@@ -117,8 +115,8 @@ class MusicEngine:
 
                 return
 
-            # reset skip flag once we advance properly
-            self._skip_flag.discard(guild_id)
+            # reset skip guard after valid progression
+            self._skip_guard.discard(guild_id)
 
             self._cancel_idle(guild_id)
 
@@ -147,30 +145,25 @@ class MusicEngine:
                 await self._play_next(player)
 
     # =====================================================
-    # TRACK END HANDLER SAFETY
+    # TRACK END (ONLY SAFE ENTRY POINT)
     # =====================================================
     async def handle_track_end(self, player: wavelink.Player):
-        """
-        Call this from bot.py instead of directly trusting track_end event.
-        """
-
         guild_id = self._guild_id(player)
 
-        # skip already handled manually → ignore duplicate track_end
-        if guild_id in self._skip_flag:
-            self._skip_flag.discard(guild_id)
+        # skip already triggered stop → ignore duplicate event
+        if guild_id in self._skip_guard:
+            self._skip_guard.discard(guild_id)
             return
 
         await self._play_next(player)
 
     # =====================================================
-    # SKIP (FIXED)
+    # SKIP (SAFE + INSTANT)
     # =====================================================
     async def skip(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
-        # mark skip so track_end doesn't double-advance
-        self._skip_flag.add(guild_id)
+        self._skip_guard.add(guild_id)
 
         state = music_manager.get_player(guild_id)
         state.current = None
@@ -181,8 +174,8 @@ class MusicEngine:
             pass
 
         # IMPORTANT:
-        # do NOT call _play_next here
-        # track_end or handler will advance safely
+        # NO manual queue advance here
+        # track_end handler owns progression
 
     # =====================================================
     # STOP
