@@ -48,8 +48,11 @@ def build_now_playing_embed(state):
     import time
 
     started = getattr(state, "current_started_at", None)
-    duration = getattr(track, "length", None)
-
+    duration = getattr(
+        getattr(track, "playable", None),
+        "length",
+        None
+    )
     if started and duration:
         try:
             elapsed = (time.time() - started) * 1000

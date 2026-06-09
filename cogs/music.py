@@ -34,9 +34,6 @@ class MusicCog(commands.Cog):
         if not player:
             player = await voice.channel.connect(cls=wavelink.Player)
 
-            # 🔥 CRITICAL: attach engine lifecycle ownership
-            engine.bind_player(player)
-
         return player
 
     # =====================================================
