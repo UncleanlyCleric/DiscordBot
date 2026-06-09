@@ -11,7 +11,7 @@ class MusicEngine:
     Rules:
     - ONLY accepts wavelink.Player
     - NO discord imports
-    - NO guild-based API usage
+    - SINGLE SOURCE OF TRUTH for playback
     """
 
     IDLE_TIMEOUT = 15
@@ -20,15 +20,12 @@ class MusicEngine:
         self._locks: dict[int, asyncio.Lock] = {}
         self._idle_tasks: dict[int, asyncio.Task] = {}
 
-        # =========================
-        # PHASE 7 ADDITIONS
-        # =========================
+        # Phase 7/8 stability systems
         self._playback_token: dict[int, int] = {}
         self._skip_lock: dict[int, bool] = {}
-        self.autoplay: dict[int, bool] = {}
 
     # =====================================================
-    # SAFE GUILD RESOLVE
+    # GUILD RESOLVE
     # =====================================================
     def _guild_id(self, player: wavelink.Player) -> int:
         guild = getattr(player, "guild", None)
@@ -42,16 +39,15 @@ class MusicEngine:
         raise RuntimeError("Cannot resolve guild id from player")
 
     # =====================================================
-    # LOCK PER GUILD
+    # LOCK
     # =====================================================
     def _lock(self, guild_id: int) -> asyncio.Lock:
         if guild_id not in self._locks:
             self._locks[guild_id] = asyncio.Lock()
-
         return self._locks[guild_id]
 
     # =====================================================
-    # TOKEN SYSTEM (PHASE 7 FIX)
+    # TOKEN (prevents race conditions)
     # =====================================================
     def _next_token(self, guild_id: int) -> int:
         self._playback_token[guild_id] = self._playback_token.get(guild_id, 0) + 1
@@ -112,23 +108,6 @@ class MusicEngine:
         await self._play_next(player)
 
     # =====================================================
-    # WATCHDOG (PHASE 7 FIX)
-    # =====================================================
-    async def _watchdog(self, player: wavelink.Player):
-        while True:
-            await asyncio.sleep(10)
-
-            try:
-                guild_id = self._guild_id(player)
-                state = music_manager.get_player(guild_id)
-
-                if state.current and not player.playing:
-                    await self._play_next(player)
-
-            except Exception:
-                break
-
-    # =====================================================
     # CORE ENGINE
     # =====================================================
     async def _play_next(self, player: wavelink.Player):
@@ -136,18 +115,16 @@ class MusicEngine:
 
         async with self._lock(guild_id):
 
+            # skip guard (prevents double advancement)
+            if self._skip_lock.pop(guild_id, False):
+                return
+
             state = music_manager.get_player(guild_id)
 
             track = state.queue.next()
 
-            # =========================
-            # EMPTY QUEUE
-            # =========================
             if not track:
                 state.current = None
-
-                if self.autoplay.get(guild_id):
-                    return
 
                 if guild_id not in self._idle_tasks:
                     self._idle_tasks[guild_id] = asyncio.create_task(
@@ -156,21 +133,13 @@ class MusicEngine:
 
                 return
 
-            # cancel idle when playing
             self._cancel_idle_timer(guild_id)
 
             state.current = track
 
-            # =========================
-            # TOKEN (ANTI-RACE)
-            # =========================
+            # token safety
             token = self._next_token(guild_id)
             state.play_token = token
-
-            # start watchdog once
-            if not hasattr(player, "_watchdog_started"):
-                player._watchdog_started = True
-                asyncio.create_task(self._watchdog(player))
 
             try:
                 playable = getattr(track, "playable", None)
@@ -187,27 +156,27 @@ class MusicEngine:
 
                 await player.play(playable)
 
-            except Exception:
+            except Exception as e:
+                print(f"[ENGINE] play error: {e}")
                 state.current = None
                 await self._play_next(player)
 
     # =====================================================
-    # SKIP (FIXED)
+    # SKIP (FIXED — DO NOT DOUBLE-POP QUEUE)
     # =====================================================
     async def skip(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
+        # prevent race with track_end
+        self._skip_lock[guild_id] = True
+
         state = music_manager.get_player(guild_id)
         state.current = None
-
-        self._skip_lock[guild_id] = True
 
         try:
             await player.stop()
         except Exception:
             pass
-
-        await self._play_next(player)
 
     # =====================================================
     # STOP
