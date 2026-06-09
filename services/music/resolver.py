@@ -1,6 +1,8 @@
 import re
 import wavelink
+
 from services.music.models import Track
+from services.music.smart_rank import pick_best
 
 
 APPLE_MUSIC = r"music\.apple\.com"
@@ -8,10 +10,6 @@ SPOTIFY = r"open\.spotify\.com"
 
 
 class MusicResolver:
-    """
-    Production-safe resolver.
-    Compatible with strict Track schema.
-    """
 
     async def resolve(self, query: str, requester_id: int):
 
@@ -20,9 +18,7 @@ class MusicResolver:
         if not query:
             return []
 
-        # =====================================================
-        # URL DETECTION
-        # =====================================================
+        # URL normalization
         if re.search(APPLE_MUSIC, query) or re.search(SPOTIFY, query):
             query = await self._convert_url(query)
 
@@ -35,60 +31,39 @@ class MusicResolver:
         if not results:
             return []
 
-        tracks = []
-
-        # =====================================================
-        # PLAYLIST HANDLING
-        # =====================================================
+        # playlist support unchanged
         if isinstance(results, wavelink.Playlist):
 
-            for item in results.tracks:
-                tracks.append(
-                    Track(
-                        title=item.title,
-                        uri=item.uri,
-                        author=getattr(item, "author", None),
-                        requester_id=requester_id,
-                    )
+            return [
+                Track(
+                    title=t.title,
+                    uri=t.uri,
+                    author=getattr(t, "author", None),
+                    requester_id=requester_id,
                 )
+                for t in results.tracks
+            ]
 
-            return tracks
+        # 🔥 SMART PICK instead of results[0]
+        best = pick_best(results, query)
 
-        # =====================================================
-        # SINGLE TRACK ONLY (SPOTIFY MODE)
-        # =====================================================
-        top = results[0]
+        if not best:
+            return []
 
-        tracks.append(
+        return [
             Track(
-                title=top.title,
-                uri=top.uri,
-                author=getattr(top, "author", None),
+                title=best.title,
+                uri=best.uri,
+                author=getattr(best, "author", None),
                 requester_id=requester_id,
             )
-        )
+        ]
 
-        return tracks
-
-    # =====================================================
-    # URL NORMALIZER
-    # =====================================================
     async def _convert_url(self, url: str) -> str:
-
         cleaned = re.sub(r"https?://", "", url)
-
-        cleaned = re.sub(
-            r"(music\.apple\.com|open\.spotify\.com)",
-            "",
-            cleaned
-        )
-
-        cleaned = cleaned.replace("/", " ")
-        cleaned = cleaned.replace("-", " ")
-        cleaned = cleaned.replace("_", " ")
-
+        cleaned = re.sub(r"(music\.apple\.com|open\.spotify\.com)", "", cleaned)
+        cleaned = cleaned.replace("/", " ").replace("-", " ").replace("_", " ")
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
-
         return cleaned
 
 
