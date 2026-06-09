@@ -89,7 +89,6 @@ class MusicCog(commands.Cog):
 
         await player_message_manager.update(
             interaction.guild,
-            interaction.channel
         )
 
         await interaction.followup.send(
