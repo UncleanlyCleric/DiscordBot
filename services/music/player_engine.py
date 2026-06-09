@@ -163,19 +163,22 @@ class MusicEngine:
     async def skip(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
+        # mark skip so track_end does NOT double-advance
         self._skip_guard.add(guild_id)
 
         state = music_manager.get_player(guild_id)
-        state.current = None
+
+        # DO NOT clear current yet (prevents queue desync)
+        # state.current = None  ❌ remove this
 
         try:
+            # stopping triggers track_end, but we guard against it
             await player.stop()
         except Exception:
             pass
 
-        # IMPORTANT:
-        # NO manual queue advance here
-        # track_end handler owns progression
+        # immediately advance AFTER stop safely
+        await self._play_next(player)
 
     # =====================================================
     # STOP
