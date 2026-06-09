@@ -18,7 +18,9 @@ from database.migrations import migration_runner
 
 from services.music.manager import music_manager
 from services.music.player_engine import engine
-
+from services.music.player_message_manager import (
+    player_message_manager
+)
 
 sys.path.append(str(Path(__file__).resolve().parent))
 
@@ -208,6 +210,19 @@ class DiscordBot(commands.Bot):
 
         try:
             await engine.handle_track_end(player)
+
+            state = music_manager.get_player(guild.id)
+
+            channel_id = state.player_channel_id
+
+            if channel_id:
+                channel = guild.get_channel(channel_id)
+
+                if channel:
+                    await player_message_manager.update(
+                        guild,
+                        channel
+                    )            
 
         except Exception:
             logging.exception(
