@@ -8,6 +8,8 @@ from services.music.resolver import music_resolver
 from services.music.manager import music_manager
 from services.music.player_engine import engine
 from services.music.player_message_manager import player_message_manager
+from services.music.now_playing import build_now_playing_embed
+from services.music.ui.music_player_view import MusicPlayerView
 
 
 class MusicCog(commands.Cog):
@@ -59,13 +61,13 @@ class MusicCog(commands.Cog):
             state.queue.add(t)
 
         # =====================================================
-        # 🔥 UI BOOTSTRAP (ONLY HERE)
+        # 🔥 FIXED UI BOOTSTRAP (NO BROKEN CALLS)
         # =====================================================
         if interaction.channel and not state.player_message_id:
 
             msg = await interaction.channel.send(
-                embed=await player_message_manager.build_embed(interaction.guild),
-                view=player_message_manager.get_view()
+                embed=build_now_playing_embed(state),
+                view=MusicPlayerView()
             )
 
             state.player_message_id = msg.id
