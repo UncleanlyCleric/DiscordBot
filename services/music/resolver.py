@@ -7,6 +7,7 @@ from services.music.smart_rank import pick_best
 APPLE_MUSIC = r"music.apple.com"
 SPOTIFY = r"open.spotify.com"
 
+
 class MusicResolver:
 
     async def resolve(self, query: str, requester_id: int):
@@ -17,9 +18,6 @@ class MusicResolver:
             return []
 
         try:
-            # IMPORTANT:
-            # Pass Spotify / Apple Music URLs directly to Lavalink.
-            # LavaSrc handles them.
             results = await wavelink.Playable.search(query)
 
         except Exception as e:
@@ -30,13 +28,19 @@ class MusicResolver:
             return []
 
         # =====================================================
-        # PLAYLIST
+        # FIX 1: REAL PLAYLIST SUPPORT (LavaSrc-safe)
         # =====================================================
-        if isinstance(results, wavelink.Playlist):
+        # Some Lavalink setups return playlists via attribute, not type
+        playlist = getattr(results, "playlist", None)
+
+        if playlist or isinstance(results, wavelink.Playlist):
+
+            tracks = getattr(results, "tracks", results)
 
             print(
                 f"[Resolver] Playlist detected: "
-                f"{results.name} ({len(results.tracks)} tracks)"
+                f"{getattr(results, 'name', 'unknown')} "
+                f"({len(tracks)} tracks)"
             )
 
             return [
@@ -47,17 +51,32 @@ class MusicResolver:
                     requester_id=requester_id,
                     playable=t,
                 )
-                for t in results.tracks
+                for t in tracks
             ]
 
         # =====================================================
-        # DIRECT URL RESULT
+        # FIX 2: URL HANDLING (Apple Music / Spotify SAFE PATH)
         # =====================================================
         if (
             re.search(APPLE_MUSIC, query)
             or re.search(SPOTIFY, query)
             or query.startswith("http")
         ):
+
+            # Apple Music often returns multiple results even for URLs
+            if isinstance(results, list) and len(results) > 1:
+                print(f"[Resolver] URL multi-result fallback: {len(results)} tracks")
+
+                return [
+                    Track(
+                        title=t.title,
+                        author=getattr(t, "author", None),
+                        uri=t.uri,
+                        requester_id=requester_id,
+                        playable=t,
+                    )
+                    for t in results
+                ]
 
             first = results[0]
 
@@ -86,7 +105,8 @@ class MusicResolver:
                 uri=best.uri,
                 requester_id=requester_id,
                 playable=best,
-                )
+            )
         ]
+
 
 music_resolver = MusicResolver()
