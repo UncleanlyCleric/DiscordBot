@@ -2,7 +2,6 @@ import discord
 
 from services.music.manager import music_manager
 from services.music.now_playing import build_now_playing_embed
-from services.music.ui.music_player_view import MusicPlayerView
 
 
 class PlayerMessageManager:
@@ -19,9 +18,9 @@ class PlayerMessageManager:
 
         embed = build_now_playing_embed(state)
 
-        # =====================================================
-        # CREATE IF MISSING
-        # =====================================================
+        from services.music.ui.music_player_view import MusicPlayerView
+
+        # CREATE
         if not state.player_message_id:
             msg = await channel.send(
                 embed=embed,
@@ -32,9 +31,7 @@ class PlayerMessageManager:
             state.player_channel_id = channel.id
             return
 
-        # =====================================================
-        # UPDATE EXISTING
-        # =====================================================
+        # UPDATE
         try:
             msg = await channel.fetch_message(state.player_message_id)
 

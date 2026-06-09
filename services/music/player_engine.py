@@ -1,11 +1,11 @@
 import asyncio
-import time
 import wavelink
 
 from services.music.manager import music_manager
 
 
 class MusicEngine:
+
     IDLE_TIMEOUT = 15
 
     def __init__(self):
@@ -58,11 +58,12 @@ class MusicEngine:
             pass
 
     # =====================================================
-    # UI HOOK (SAFE IMPORT)
+    # UI UPDATE
     # =====================================================
     async def _notify_ui(self, player: wavelink.Player):
         try:
             from services.music.player_message_manager import player_message_manager
+
             guild = player.guild
             if guild:
                 await player_message_manager.update(guild)
@@ -70,7 +71,7 @@ class MusicEngine:
             pass
 
     # =====================================================
-    # ENQUEUE (FIXED: NO AUTO PLAY)
+    # ENQUEUE (NO AUTO PLAY)
     # =====================================================
     async def enqueue(self, player: wavelink.Player, track):
         guild_id = self._guild_id(player)
@@ -80,10 +81,8 @@ class MusicEngine:
 
         self._cancel_idle(guild_id)
 
-        # ❌ DO NOT trigger playback here anymore
-
     # =====================================================
-    # PLAY NEXT (ONLY ENTRY POINT)
+    # PLAY NEXT (ONLY DRIVER OF PLAYBACK)
     # =====================================================
     async def _play_next(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
@@ -126,13 +125,22 @@ class MusicEngine:
                 await self._play_next(player)
 
     # =====================================================
-    # SKIP (SAFE SINGLE ADVANCE)
+    # TRACK END (RESTORED - CRITICAL)
     # =====================================================
-    async def skip(self, player: wavelink.Player):
+    async def handle_track_end(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
         if guild_id in self._skip_guard:
+            self._skip_guard.discard(guild_id)
             return
+
+        await self._play_next(player)
+
+    # =====================================================
+    # SKIP
+    # =====================================================
+    async def skip(self, player: wavelink.Player):
+        guild_id = self._guild_id(player)
 
         self._skip_guard.add(guild_id)
 

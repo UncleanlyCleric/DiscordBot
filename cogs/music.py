@@ -7,6 +7,7 @@ import wavelink
 from services.music.resolver import music_resolver
 from services.music.manager import music_manager
 from services.music.player_engine import engine
+from services.music.player_message_manager import player_message_manager
 
 
 class MusicCog(commands.Cog):
@@ -14,9 +15,6 @@ class MusicCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # =====================================================
-    # PLAYER GET
-    # =====================================================
     async def _get_player(self, interaction: discord.Interaction):
         if not interaction.guild:
             return None
@@ -52,17 +50,17 @@ class MusicCog(commands.Cog):
 
         primary = tracks[0]
 
-        # enqueue main
         await engine.enqueue(player, primary)
 
-        # add extras
         state = music_manager.get_player(interaction.guild_id)
+
         for t in tracks[1:3]:
             state.queue.add(t)
 
-        # ONLY start if nothing is playing
         if not state.current:
             await engine._play_next(player)
+
+        await player_message_manager.update(interaction.guild)
 
         await interaction.followup.send(
             f"🎵 Queued: **{primary.title}**"
@@ -84,6 +82,8 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
+        await player_message_manager.update(interaction.guild)
+
         await interaction.response.send_message("🛑 Stopped", ephemeral=True)
 
     # =====================================================
@@ -96,6 +96,8 @@ class MusicCog(commands.Cog):
 
         if player:
             await engine.skip(player)
+
+        await player_message_manager.update(interaction.guild)
 
         await interaction.response.send_message("⏭ Skipped", ephemeral=True)
 
