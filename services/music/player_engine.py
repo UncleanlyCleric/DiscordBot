@@ -7,11 +7,10 @@ from services.music.player_message_manager import player_message_manager
 
 class MusicEngine:
     """
-    Phase 10.1 Cleanup Engine (STABLE)
-
-    Fix:
-    - eliminate double advancement on skip
-    - ensure track_end cannot race skip
+    Stable playback engine:
+    - single playback path
+    - deterministic UI updates
+    - skip-safe execution
     """
 
     IDLE_TIMEOUT = 15
@@ -67,7 +66,7 @@ class MusicEngine:
             pass
 
     # =====================================================
-    # UI NOTIFY
+    # UI UPDATE (ONLY SOURCE OF TRUTH)
     # =====================================================
     async def _notify_ui(self, player: wavelink.Player):
         try:
@@ -101,7 +100,7 @@ class MusicEngine:
         self._cancel_idle(guild_id)
 
     # =====================================================
-    # CORE PLAYBACK
+    # PLAY NEXT
     # =====================================================
     async def _play_next(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
@@ -114,6 +113,12 @@ class MusicEngine:
 
             if not track:
                 state.current = None
+
+                if guild_id not in self._idle_tasks:
+                    self._idle_tasks[guild_id] = asyncio.create_task(
+                        self._idle_disconnect(player)
+                    )
+
                 await self._notify_ui(player)
                 return
 
@@ -143,12 +148,11 @@ class MusicEngine:
                 await self._play_next(player)
 
     # =====================================================
-    # TRACK END (AUTHORITATIVE)
+    # TRACK END
     # =====================================================
     async def handle_track_end(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
-        # 🚨 skip guard prevents double-advance
         if guild_id in self._skip_guard:
             self._skip_guard.discard(guild_id)
             return
@@ -156,18 +160,19 @@ class MusicEngine:
         await self._play_next(player)
 
     # =====================================================
-    # SKIP (FIXED)
+    # SKIP
     # =====================================================
     async def skip(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
-        # mark skip so track_end does NOT also advance
         self._skip_guard.add(guild_id)
 
         try:
             await player.stop()
         except Exception:
             pass
+
+        await self._play_next(player)
 
     # =====================================================
     # STOP

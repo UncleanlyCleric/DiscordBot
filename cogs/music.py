@@ -15,6 +15,9 @@ class MusicCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    # =====================================================
+    # PLAYER GET
+    # =====================================================
     async def _get_player(self, interaction: discord.Interaction):
         if not interaction.guild:
             raise RuntimeError("Guild only command")
@@ -33,6 +36,8 @@ class MusicCog(commands.Cog):
 
         return player
 
+    # =====================================================
+    # PLAY
     # =====================================================
     @app_commands.command(name="play")
     async def play(self, interaction: discord.Interaction, query: str):
@@ -58,16 +63,14 @@ class MusicCog(commands.Cog):
         for t in tracks[1:3]:
             state.queue.add(t)
 
-        # start playback safely (ONLY if nothing playing)
-        if not state.current:
-            await engine._play_next(player)
-
-        await player_message_manager.update(interaction.guild)
+        await engine._play_next(player)
 
         await interaction.followup.send(
             content=f"🎵 Queued: **{primary.title}**"
         )
 
+    # =====================================================
+    # STOP
     # =====================================================
     @app_commands.command(name="stop")
     async def stop(self, interaction: discord.Interaction):
@@ -82,10 +85,10 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await player_message_manager.update(interaction.guild)
-
         await interaction.response.send_message("🛑 Stopped", ephemeral=True)
 
+    # =====================================================
+    # SKIP
     # =====================================================
     @app_commands.command(name="skip")
     async def skip(self, interaction: discord.Interaction):
@@ -95,12 +98,60 @@ class MusicCog(commands.Cog):
         if player:
             await engine.skip(player)
 
-        await player_message_manager.update(interaction.guild)
-
         await interaction.response.send_message("⏭ Skipped", ephemeral=True)
 
     # =====================================================
-    # EXTENSION ENTRYPOINT (REQUIRED BY DISCORD.PY)
+    # PAUSE
     # =====================================================
-    async def setup(bot: commands.Bot):
-        await bot.add_cog(MusicCog(bot))
+    @app_commands.command(name="pause")
+    async def pause(self, interaction: discord.Interaction):
+
+        player = interaction.guild.voice_client
+
+        if player:
+            try:
+                await player.pause(True)
+            except Exception:
+                pass
+
+        await interaction.response.send_message("⏸ Paused", ephemeral=True)
+
+    # =====================================================
+    # RESUME
+    # =====================================================
+    @app_commands.command(name="resume")
+    async def resume(self, interaction: discord.Interaction):
+
+        player = interaction.guild.voice_client
+
+        if player:
+            try:
+                await player.pause(False)
+            except Exception:
+                pass
+
+        await interaction.response.send_message("▶ Resumed", ephemeral=True)
+
+    # =====================================================
+    # QUEUE
+    # =====================================================
+    @app_commands.command(name="queue")
+    async def queue(self, interaction: discord.Interaction):
+
+        state = music_manager.get_player(interaction.guild_id)
+
+        tracks = state.queue.all()
+
+        if not tracks:
+            return await interaction.response.send_message("Queue empty.")
+
+        msg = "\n".join(
+            f"{i + 1}. {t.title}"
+            for i, t in enumerate(tracks[:10])
+        )
+
+        await interaction.response.send_message(msg)
+
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(MusicCog(bot))
