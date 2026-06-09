@@ -98,3 +98,9 @@ class MusicCog(commands.Cog):
         await player_message_manager.update(interaction.guild)
 
         await interaction.response.send_message("⏭ Skipped", ephemeral=True)
+
+    # =====================================================
+    # EXTENSION ENTRYPOINT (REQUIRED BY DISCORD.PY)
+    # =====================================================
+    async def setup(bot: commands.Bot):
+        await bot.add_cog(MusicCog(bot))
