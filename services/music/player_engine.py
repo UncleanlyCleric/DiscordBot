@@ -11,6 +11,7 @@ class MusicEngine:
     # ENQUEUE
     # =====================================================
     async def enqueue(self, player: wavelink.Player, track):
+
         state = music_manager.get_player(player.guild.id)
 
         state.queue.add(track)
@@ -21,6 +22,10 @@ class MusicEngine:
             getattr(track, "title", "Unknown"),
             len(state.queue.all())
         )
+
+        # ✅ ADD THIS HERE
+        from services.music.player_message_manager import player_message_manager
+        await player_message_manager.update(player.guild)
 
     # =====================================================
     # START

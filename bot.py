@@ -227,7 +227,10 @@ class DiscordBot(commands.Bot):
         except Exception:
             pass
 
-        await super().close()
+        try:
+            await super().close()
+        except RuntimeError:
+            pass
 
 
 async def main():
