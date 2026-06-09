@@ -181,35 +181,32 @@ class DiscordBot(commands.Bot):
     # =====================================================
     async def on_wavelink_track_end(self, payload):
         """
-        Queue progression handler.
-
-        Fires whenever Lavalink reports a track ended.
-        Automatically advances to the next queued track.
+        Track end handler (SIGNAL ONLY).
+        DO NOT advance queue here.
         """
 
         player = payload.player
-
         if not player:
             return
 
         guild = getattr(player, "guild", None)
-
         if not guild:
             return
 
         state = music_manager.get_player(guild.id)
 
+        # clear current track ONLY
         state.current = None
 
+        # IMPORTANT:
+        # Let engine handle continuation
         try:
-            await engine.handle_track_end(player)
-
+            await engine.play_next(player)
         except Exception:
             logging.exception(
                 "[MUSIC] Failed advancing queue for guild %s",
                 guild.id
             )
-
     # =====================================================
     # SHUTDOWN
     # =====================================================

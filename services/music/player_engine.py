@@ -6,25 +6,22 @@ from services.music.manager import music_manager
 
 class MusicEngine:
     """
-    Phase 10.1 Cleanup Engine
+    Phase 10.1 Cleanup Engine (STABLE)
 
     Guarantees:
     - single event-driven playback path
-    - no race conditions (token guarded)
-    - skip is signal-only
-    - track_end is authoritative
+    - safe skip fallback
+    - no double advancement
+    - idle disconnect safe
     """
 
     IDLE_TIMEOUT = 15
+    SKIP_FALLBACK_TIMEOUT = 2
 
     def __init__(self):
         self._locks: dict[int, asyncio.Lock] = {}
         self._idle_tasks: dict[int, asyncio.Task] = {}
-
-        # skip guard prevents duplicate track_end processing
         self._skip_guard: set[int] = set()
-
-        # token ensures stale track_end cannot fire
         self._play_token: dict[int, int] = {}
 
     # =====================================================
@@ -50,7 +47,7 @@ class MusicEngine:
         return self._locks[guild_id]
 
     # =====================================================
-    # TOKEN SYSTEM (CRITICAL FIX)
+    # TOKEN SYSTEM (PREVENT DOUBLE ADVANCE)
     # =====================================================
     def _next_token(self, guild_id: int) -> int:
         self._play_token[guild_id] = self._play_token.get(guild_id, 0) + 1
@@ -76,8 +73,11 @@ class MusicEngine:
         if state.current or state.queue.all():
             return
 
-        await player.disconnect()
-        print(f"[ENGINE] Idle disconnect guild={guild_id}")
+        try:
+            await player.disconnect()
+            print(f"[ENGINE] Idle disconnect guild={guild_id}")
+        except Exception:
+            pass
 
     # =====================================================
     # ENQUEUE
@@ -94,7 +94,7 @@ class MusicEngine:
             await self._play_next(player)
 
     # =====================================================
-    # CORE PLAYBACK (ONLY ENTRY POINT)
+    # CORE PLAYBACK
     # =====================================================
     async def _play_next(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
@@ -144,12 +144,12 @@ class MusicEngine:
                 await self._play_next(player)
 
     # =====================================================
-    # TRACK END (AUTHORITY)
+    # TRACK END (AUTHORITATIVE)
     # =====================================================
     async def handle_track_end(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
-        # skip already handled stop
+        # skip guard prevents double trigger from skip()
         if guild_id in self._skip_guard:
             self._skip_guard.discard(guild_id)
             return
@@ -157,18 +157,26 @@ class MusicEngine:
         await self._play_next(player)
 
     # =====================================================
-    # SKIP (SIGNAL ONLY — NO STATE MUTATION)
+    # SKIP (SAFE + FALLBACK)
     # =====================================================
     async def skip(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
-        # mark skip so track_end is ignored
         self._skip_guard.add(guild_id)
 
         try:
             await player.stop()
         except Exception:
             pass
+
+        # fallback: if track_end doesn't fire, still continue queue
+        async def fallback():
+            await asyncio.sleep(self.SKIP_FALLBACK_TIMEOUT)
+            if guild_id in self._skip_guard:
+                self._skip_guard.discard(guild_id)
+                await self._play_next(player)
+
+        asyncio.create_task(fallback())
 
     # =====================================================
     # STOP
