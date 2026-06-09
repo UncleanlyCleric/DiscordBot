@@ -2,6 +2,7 @@ import discord
 
 from services.music.player_engine import engine
 
+
 class MusicPlayerView(discord.ui.View):
 
     def __init__(self):
@@ -12,7 +13,8 @@ class MusicPlayerView(discord.ui.View):
     # =====================================================
     @discord.ui.button(
         emoji="⏯",
-        style=discord.ButtonStyle.secondary
+        style=discord.ButtonStyle.secondary,
+        custom_id="music_pause_resume"
     )
     async def pause_resume(
         self,
@@ -43,7 +45,8 @@ class MusicPlayerView(discord.ui.View):
     # =====================================================
     @discord.ui.button(
         emoji="⏭",
-        style=discord.ButtonStyle.primary
+        style=discord.ButtonStyle.primary,
+        custom_id="music_skip"
     )
     async def skip(
         self,
@@ -65,7 +68,8 @@ class MusicPlayerView(discord.ui.View):
     # =====================================================
     @discord.ui.button(
         emoji="⏹",
-        style=discord.ButtonStyle.danger
+        style=discord.ButtonStyle.danger,
+        custom_id="music_stop"
     )
     async def stop(
         self,
