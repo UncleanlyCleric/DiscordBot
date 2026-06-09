@@ -191,38 +191,22 @@ class DiscordBot(commands.Bot):
         """
         Track end handler.
 
-        Engine owns queue progression.
+        Engine owns queue progression + UI updates.
         """
 
         player = payload.player
-
         if not player:
             return
 
         guild = getattr(player, "guild", None)
-
         if not guild:
             return
 
         state = music_manager.get_player(guild.id)
-
         state.current = None
 
         try:
             await engine.handle_track_end(player)
-
-            state = music_manager.get_player(guild.id)
-
-            channel_id = state.player_channel_id
-
-            if channel_id:
-                channel = guild.get_channel(channel_id)
-
-                if channel:
-                    await player_message_manager.update(
-                        guild,
-                        channel
-                    )            
 
         except Exception:
             logging.exception(

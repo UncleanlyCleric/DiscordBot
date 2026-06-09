@@ -2,6 +2,7 @@ import asyncio
 import wavelink
 
 from services.music.manager import music_manager
+from services.music.player_message_manager import player_message_manager
 
 
 class MusicEngine:
@@ -47,14 +48,11 @@ class MusicEngine:
         return self._locks[guild_id]
 
     # =====================================================
-    # TOKEN SYSTEM (PREVENT DOUBLE ADVANCE)
+    # TOKEN SYSTEM
     # =====================================================
     def _next_token(self, guild_id: int) -> int:
         self._play_token[guild_id] = self._play_token.get(guild_id, 0) + 1
         return self._play_token[guild_id]
-
-    def _is_stale(self, guild_id: int, token: int) -> bool:
-        return self._play_token.get(guild_id) != token
 
     # =====================================================
     # IDLE
@@ -75,7 +73,29 @@ class MusicEngine:
 
         try:
             await player.disconnect()
-            print(f"[ENGINE] Idle disconnect guild={guild_id}")
+        except Exception:
+            pass
+
+    # =====================================================
+    # UI NOTIFY (NEW CORE PIECE)
+    # =====================================================
+    async def _notify_ui(self, player: wavelink.Player):
+        try:
+            guild = getattr(player, "guild", None)
+            if not guild:
+                return
+
+            state = music_manager.get_player(guild.id)
+
+            if not state.player_channel_id:
+                return
+
+            channel = guild.get_channel(state.player_channel_id)
+            if not channel:
+                return
+
+            await player_message_manager.update(guild, channel)
+
         except Exception:
             pass
 
@@ -113,13 +133,13 @@ class MusicEngine:
                         self._idle_disconnect(player)
                     )
 
+                await self._notify_ui(player)
                 return
 
             self._cancel_idle(guild_id)
 
-            token = self._next_token(guild_id)
             state.current = track
-            state.play_token = token
+            self._next_token(guild_id)
 
             try:
                 playable = getattr(track, "playable", None)
@@ -136,15 +156,14 @@ class MusicEngine:
 
                 await player.play(playable)
 
-                print(f"[ENGINE] Now playing: {track.title}")
+                await self._notify_ui(player)
 
-            except Exception as e:
-                print(f"[ENGINE] play error: {e}")
+            except Exception:
                 state.current = None
                 await self._play_next(player)
 
     # =====================================================
-    # TRACK END (AUTHORITATIVE)
+    # TRACK END
     # =====================================================
     async def handle_track_end(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
@@ -180,6 +199,8 @@ class MusicEngine:
             await player.stop()
         except Exception:
             pass
+
+        await self._notify_ui(player)
 
 
 engine = MusicEngine()
