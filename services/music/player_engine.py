@@ -23,32 +23,79 @@ async def enqueue(self, player: wavelink.Player, track):
         player.guild.id
     )
 
-# =====================================================
-# START PLAYBACK IF IDLE
-# =====================================================
-async def start(self, player: wavelink.Player):
+    # =====================================================
+    # START PLAYBACK IF IDLE
+    # =====================================================
+    async def start(self, player: wavelink.Player):
 
-    state = music_manager.get_player(player.guild.id)
+        state = music_manager.get_player(player.guild.id)
 
-    if state.current:
-        return
+        if state.current:
+            return
 
-    await self._play_next(player)
+        await self._play_next(player)
 
-# =====================================================
-# PLAY NEXT TRACK
-# =====================================================
-async def _play_next(self, player: wavelink.Player):
+    # =====================================================
+    # PLAY NEXT TRACK
+    # =====================================================
+    async def _play_next(self, player: wavelink.Player):
 
-    state = music_manager.get_player(player.guild.id)
+        state = music_manager.get_player(player.guild.id)
 
-    next_track = state.queue.next()
+        next_track = state.queue.next()
 
-    if not next_track:
+        if not next_track:
 
-        state.current = None
-        state.current_started_at = None
-        state.current_duration = None
+            state.current = None
+            state.current_started_at = None
+            state.current_duration = None
+
+            try:
+                from services.music.player_message_manager import (
+                    player_message_manager
+                )
+
+                await player_message_manager.update(player.guild)
+
+            except Exception:
+                logging.exception(
+                    "[MUSIC] Failed UI update after queue empty"
+                )
+
+            return
+
+        state.current = next_track
+
+        state.current_started_at = time.time()
+
+        duration = getattr(
+            getattr(next_track, "playable", None),
+            "length",
+            None
+        )
+
+        state.current_duration = duration
+
+        try:
+            await player.play(next_track.playable)
+
+            logging.info(
+                "[MUSIC] Playing '%s' in guild %s",
+                next_track.title,
+                player.guild.id
+            )
+
+        except Exception:
+
+            logging.exception(
+                "[MUSIC] Failed playing '%s'",
+                next_track.title
+            )
+
+            state.current = None
+
+            await self._play_next(player)
+            return
 
         try:
             from services.music.player_message_manager import (
@@ -59,107 +106,60 @@ async def _play_next(self, player: wavelink.Player):
 
         except Exception:
             logging.exception(
-                "[MUSIC] Failed UI update after queue empty"
+                "[MUSIC] Failed UI update after play"
             )
 
-        return
+    # =====================================================
+    # SKIP
+    # =====================================================
+    async def skip(self, player: wavelink.Player):
 
-    state.current = next_track
-
-    state.current_started_at = time.time()
-
-    duration = getattr(
-        getattr(next_track, "playable", None),
-        "length",
-        None
-    )
-
-    state.current_duration = duration
-
-    try:
-        await player.play(next_track.playable)
-
-        logging.info(
-            "[MUSIC] Playing '%s' in guild %s",
-            next_track.title,
-            player.guild.id
-        )
-
-    except Exception:
-
-        logging.exception(
-            "[MUSIC] Failed playing '%s'",
-            next_track.title
-        )
+        state = music_manager.get_player(player.guild.id)
 
         state.current = None
+        state.current_started_at = None
+        state.current_duration = None
 
-        await self._play_next(player)
-        return
+        try:
+            await player.skip(force=True)
 
-    try:
-        from services.music.player_message_manager import (
-            player_message_manager
-        )
+        except Exception:
 
-        await player_message_manager.update(player.guild)
+            try:
+                await player.stop()
+            except Exception:
+                pass
 
-    except Exception:
-        logging.exception(
-            "[MUSIC] Failed UI update after play"
-        )
+    # =====================================================
+    # STOP
+    # =====================================================
+    async def stop(self, player: wavelink.Player):
 
-# =====================================================
-# SKIP
-# =====================================================
-async def skip(self, player: wavelink.Player):
+        state = music_manager.get_player(player.guild.id)
 
-    state = music_manager.get_player(player.guild.id)
+        state.queue.clear()
 
-    state.current = None
-    state.current_started_at = None
-    state.current_duration = None
-
-    try:
-        await player.skip(force=True)
-
-    except Exception:
+        state.current = None
+        state.current_started_at = None
+        state.current_duration = None
 
         try:
             await player.stop()
+
         except Exception:
             pass
 
-# =====================================================
-# STOP
-# =====================================================
-async def stop(self, player: wavelink.Player):
+        try:
+            from services.music.player_message_manager import (
+                player_message_manager
+            )
 
-    state = music_manager.get_player(player.guild.id)
+            await player_message_manager.update(player.guild)
 
-    state.queue.clear()
-
-    state.current = None
-    state.current_started_at = None
-    state.current_duration = None
-
-    try:
-        await player.stop()
-
-    except Exception:
-        pass
-
-    try:
-        from services.music.player_message_manager import (
-            player_message_manager
-        )
-
-        await player_message_manager.update(player.guild)
-
-    except Exception:
-        logging.exception(
-            "[MUSIC] Failed UI update after stop"
-        )
+        except Exception:
+            logging.exception(
+                "[MUSIC] Failed UI update after stop"
+            )
 
 
 engine = MusicEngine()
