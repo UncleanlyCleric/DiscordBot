@@ -41,6 +41,11 @@ class DiscordBot(commands.Bot):
             intents=intents
         )
 
+        # =====================================================
+        # DEV GUILD (optional override)
+        # =====================================================
+        self.dev_guild_id = getattr(config, "dev_guild_id", None)
+
     # =====================================================
     # BOOT
     # =====================================================
@@ -68,7 +73,6 @@ class DiscordBot(commands.Bot):
             nodes=nodes
         )
 
-        # wait until pool is actually usable
         for _ in range(20):
             if wavelink.Pool.nodes:
                 break
@@ -91,11 +95,34 @@ class DiscordBot(commands.Bot):
                 logging.exception("[COG] Failed %s", cog)
 
         # =====================================================
-        # SYNC COMMANDS
+        # SYNC COMMANDS (PRODUCTION + DEV GUILD MODE)
         # =====================================================
         try:
-            synced = await self.tree.sync()
-            logging.info("[CMD] Synced %s commands", len(synced))
+            # Global sync (slow but required for production rollout)
+            global_synced = await self.tree.sync()
+            logging.info("[CMD] Global synced %s commands", len(global_synced))
+
+            # Dev guild sync (instant updates)
+            guild_id = self.dev_guild_id
+
+            if not guild_id and self.guilds:
+                guild_id = self.guilds[0].id
+                logging.info("[CMD] Auto-selected dev guild: %s", guild_id)
+
+            if guild_id:
+                guild = discord.Object(id=guild_id)
+
+                self.tree.copy_global_to(guild=guild)
+                dev_synced = await self.tree.sync(guild=guild)
+
+                logging.info(
+                    "[CMD] Dev guild synced %s commands (guild=%s)",
+                    len(dev_synced),
+                    guild_id
+                )
+            else:
+                logging.warning("[CMD] No dev guild available for fast sync")
+
         except Exception:
             logging.exception("[CMD] Sync failed")
 
@@ -108,7 +135,6 @@ class DiscordBot(commands.Bot):
 
         for player in music_manager.get_all():
             try:
-                # ONLY restore queue, NOT playback
                 tracks = player.queue.all()
                 player.queue.clear()
                 for t in tracks:
@@ -121,6 +147,11 @@ class DiscordBot(commands.Bot):
     # =====================================================
     async def on_ready(self):
         logging.info("[READY] Logged in as %s (%s)", self.user, self.user.id)
+
+        # fallback dev guild detection
+        if not self.dev_guild_id and self.guilds:
+            self.dev_guild_id = self.guilds[0].id
+            logging.info("[CMD] Auto dev guild set: %s", self.dev_guild_id)
 
     # =====================================================
     # AUDIT
@@ -148,13 +179,6 @@ class DiscordBot(commands.Bot):
     # TRACK END (SAFE STATE ONLY)
     # =====================================================
     async def on_wavelink_track_end(self, payload):
-        """
-        Production-safe:
-        - DO NOT start playback here
-        - DO NOT modify queues
-        - ONLY clear state
-        """
-
         player = payload.player
         if not player:
             return
@@ -164,7 +188,6 @@ class DiscordBot(commands.Bot):
             return
 
         state = music_manager.get_player(guild.id)
-
         state.current = None
 
     # =====================================================
