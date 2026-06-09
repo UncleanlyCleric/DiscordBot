@@ -76,7 +76,6 @@ class DiscordBot(commands.Bot):
             nodes=[node]
         )
 
-        # WAIT FOR NODE SAFELY
         for _ in range(20):
             if wavelink.Pool.nodes:
                 break
@@ -98,7 +97,9 @@ class DiscordBot(commands.Bot):
                 audit.cog_failed(cog, e)
                 logging.exception("[COG] Failed %s", cog)
 
-        # persistent UI view
+        # =====================================================
+        # PERSISTENT UI VIEW (SAFE PLACE)
+        # =====================================================
         self.add_view(MusicPlayerView())
 
         # =====================================================
@@ -167,7 +168,7 @@ class DiscordBot(commands.Bot):
             logging.info("[CMD] Auto dev guild set: %s", self.dev_guild_id)
 
     # =====================================================
-    # COMMAND AUDIT
+    # AUDIT
     # =====================================================
     async def on_app_command_completion(self, interaction, command):
         audit.command_called(
@@ -183,28 +184,29 @@ class DiscordBot(commands.Bot):
         )
 
     # =====================================================
-    # WAVELINK EVENTS (🔥 CRITICAL FIX FOR UI + SKIP)
+    # WAVELINK EVENTS (FIXED SAFE DISPATCH)
     # =====================================================
     async def on_wavelink_track_end(self, payload):
         try:
-            await engine._play_next(payload.player)
+            # ✅ SAFE ENTRY POINT (NOT PRIVATE METHOD)
+            await engine.handle_track_end(payload.player)
         except Exception:
             logging.exception("[MUSIC] track_end failed")
 
     async def on_wavelink_track_exception(self, payload):
         try:
-            await engine._play_next(payload.player)
+            await engine.handle_track_end(payload.player)
         except Exception:
             logging.exception("[MUSIC] track_exception failed")
 
     async def on_wavelink_track_stuck(self, payload):
         try:
-            await engine._play_next(payload.player)
+            await engine.handle_track_end(payload.player)
         except Exception:
             logging.exception("[MUSIC] track_stuck failed")
 
     # =====================================================
-    # LAVALINK READY
+    # NODE READY
     # =====================================================
     async def on_wavelink_node_ready(self, payload):
         logging.info("[LAVALINK] Node ready: %s", payload.node.identifier)

@@ -1,12 +1,22 @@
 import discord
-
-from services.music.player_engine import engine
+from services.music.manager import music_manager
+from services.music.now_playing import build_now_playing_embed
 
 
 class MusicPlayerView(discord.ui.View):
 
     def __init__(self):
         super().__init__(timeout=None)
+
+    # =====================================================
+    # SAFE STATE RESOLVE
+    # =====================================================
+    def _state(self, interaction: discord.Interaction):
+        return music_manager.get_player(interaction.guild.id)
+
+    def _refresh(self, interaction: discord.Interaction):
+        state = self._state(interaction)
+        return build_now_playing_embed(state)
 
     # =====================================================
     # PAUSE / RESUME
@@ -25,22 +35,21 @@ class MusicPlayerView(discord.ui.View):
             return
 
         player = interaction.guild.voice_client
-        if not player:
-            return await interaction.response.defer()
+        if player:
+            try:
+                await player.pause(not player.paused)
+            except Exception:
+                pass
 
-        try:
-            # keep engine unaware change minimal, but consistent
-            if player.paused:
-                await player.pause(False)
-            else:
-                await player.pause(True)
-        except Exception:
-            pass
+        embed = self._refresh(interaction)
 
-        await interaction.response.defer()
+        await interaction.response.edit_message(
+            embed=embed,
+            view=self
+        )
 
     # =====================================================
-    # SKIP (FIXED)
+    # SKIP (NO ENGINE IMPORT — FIXED)
     # =====================================================
     @discord.ui.button(
         emoji="⏭",
@@ -56,13 +65,20 @@ class MusicPlayerView(discord.ui.View):
             return
 
         player = interaction.guild.voice_client
+
         if player:
+            from services.music.player_engine import engine  # ✅ lazy import FIX
             await engine.skip(player)
 
-        await interaction.response.defer()
+        embed = self._refresh(interaction)
+
+        await interaction.response.edit_message(
+            embed=embed,
+            view=self
+        )
 
     # =====================================================
-    # STOP (FIXED)
+    # STOP (NO ENGINE IMPORT — FIXED)
     # =====================================================
     @discord.ui.button(
         emoji="⏹",
@@ -78,7 +94,14 @@ class MusicPlayerView(discord.ui.View):
             return
 
         player = interaction.guild.voice_client
+
         if player:
+            from services.music.player_engine import engine  # ✅ lazy import FIX
             await engine.stop(player)
 
-        await interaction.response.defer()
+        embed = self._refresh(interaction)
+
+        await interaction.response.edit_message(
+            embed=embed,
+            view=self
+        )
