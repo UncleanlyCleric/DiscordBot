@@ -7,6 +7,7 @@ import wavelink
 from services.music.resolver import music_resolver
 from services.music.manager import music_manager
 from services.music.player_engine import engine
+from services.music.player_message_manager import player_message_manager
 
 
 class MusicCog(commands.Cog):
@@ -57,7 +58,21 @@ class MusicCog(commands.Cog):
         for t in tracks[1:3]:
             state.queue.add(t)
 
-        # 🚫 NO UI CALLS HERE (engine owns UI now)
+        # =====================================================
+        # 🔥 UI BOOTSTRAP (ONLY HERE)
+        # =====================================================
+        if interaction.channel and not state.player_message_id:
+
+            msg = await interaction.channel.send(
+                embed=await player_message_manager.build_embed(interaction.guild),
+                view=player_message_manager.get_view()
+            )
+
+            state.player_message_id = msg.id
+            state.player_channel_id = interaction.channel.id
+
+        else:
+            await player_message_manager.update(interaction.guild)
 
         await interaction.followup.send(
             content=f"🎵 Queued: **{primary.title}**"
@@ -89,52 +104,6 @@ class MusicCog(commands.Cog):
             await engine.skip(player)
 
         await interaction.response.send_message("⏭ Skipped", ephemeral=True)
-
-    # =====================================================
-    @app_commands.command(name="pause")
-    async def pause(self, interaction: discord.Interaction):
-
-        player = interaction.guild.voice_client
-
-        if player:
-            try:
-                await player.pause(True)
-            except Exception:
-                pass
-
-        await interaction.response.send_message("⏸ Paused", ephemeral=True)
-
-    # =====================================================
-    @app_commands.command(name="resume")
-    async def resume(self, interaction: discord.Interaction):
-
-        player = interaction.guild.voice_client
-
-        if player:
-            try:
-                await player.pause(False)
-            except Exception:
-                pass
-
-        await interaction.response.send_message("▶ Resumed", ephemeral=True)
-
-    # =====================================================
-    @app_commands.command(name="queue")
-    async def queue(self, interaction: discord.Interaction):
-
-        state = music_manager.get_player(interaction.guild_id)
-
-        tracks = state.queue.all()
-
-        if not tracks:
-            return await interaction.response.send_message("Queue empty.")
-
-        msg = "\n".join(
-            f"{i + 1}. {t.title}"
-            for i, t in enumerate(tracks[:10])
-        )
-
-        await interaction.response.send_message(msg)
 
 
 async def setup(bot: commands.Bot):

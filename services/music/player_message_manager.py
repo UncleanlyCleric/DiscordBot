@@ -10,6 +10,7 @@ class PlayerMessageManager:
     """
 
     async def update(self, guild: discord.Guild):
+
         state = music_manager.get_player(guild.id)
 
         channel_id = state.player_channel_id
@@ -24,23 +25,30 @@ class PlayerMessageManager:
 
         embed = build_now_playing_embed(state)
 
-        # -------------------------------------------------
-        # IMPORTANT: import UI locally (prevents cycle)
-        # -------------------------------------------------
+        # lazy import prevents circular dependency
         from services.music.ui.music_player_view import MusicPlayerView
 
-        # FIRST MESSAGE
+        # =====================================================
+        # CREATE UI IF IT DOES NOT EXIST
+        # =====================================================
         if not message_id:
-            msg = await channel.send(
-                embed=embed,
-                view=MusicPlayerView()
-            )
+            try:
+                msg = await channel.send(
+                    embed=embed,
+                    view=MusicPlayerView()
+                )
 
-            state.player_message_id = msg.id
-            state.player_channel_id = channel.id
+                state.player_message_id = msg.id
+                state.player_channel_id = channel.id
+
+            except Exception:
+                pass
+
             return
 
-        # UPDATE EXISTING
+        # =====================================================
+        # UPDATE UI IF EXISTS
+        # =====================================================
         try:
             msg = await channel.fetch_message(message_id)
 
@@ -50,13 +58,18 @@ class PlayerMessageManager:
             )
 
         except Exception:
-            msg = await channel.send(
-                embed=embed,
-                view=MusicPlayerView()
-            )
+            # fallback: recreate UI if message lost
+            try:
+                msg = await channel.send(
+                    embed=embed,
+                    view=MusicPlayerView()
+                )
 
-            state.player_message_id = msg.id
-            state.player_channel_id = channel.id
+                state.player_message_id = msg.id
+                state.player_channel_id = channel.id
+
+            except Exception:
+                pass
 
 
 player_message_manager = PlayerMessageManager()
