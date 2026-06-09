@@ -14,6 +14,8 @@ class MusicEngine:
     - NO guild-based API usage
     """
 
+    IDLE_TIMEOUT = 15
+
     def __init__(self):
         self._locks: dict[int, asyncio.Lock] = {}
         self._idle_tasks: dict[int, asyncio.Task] = {}
@@ -42,30 +44,68 @@ class MusicEngine:
         return self._locks[guild_id]
 
     # =====================================================
-    # IDLE TIMER MANAGEMENT
+    # IDLE TIMER
     # =====================================================
     def _cancel_idle_timer(self, guild_id: int):
         task = self._idle_tasks.pop(guild_id, None)
 
         if task and not task.done():
+            print(f"[ENGINE] Cancelling idle timer guild={guild_id}")
             task.cancel()
 
     async def _idle_disconnect(self, player: wavelink.Player):
         """
-        Disconnect after 2 minutes of inactivity.
+        Disconnect after inactivity.
         """
 
-        await asyncio.sleep(15)
+        guild_id = self._guild_id(player)
+
+        print(f"[ENGINE] Idle timer started guild={guild_id}")
+
+        await asyncio.sleep(self.IDLE_TIMEOUT)
+
+        print(f"[ENGINE] Idle timer expired guild={guild_id}")
 
         try:
             guild_id = self._guild_id(player)
 
             state = music_manager.get_player(guild_id)
 
-            if state.current:
+            # -------------------------------------------------
+            # SAFETY CHECKS
+            # -------------------------------------------------
+            if state.current is not None:
+                print(
+                    f"[ENGINE] Idle abort: current track exists "
+                    f"guild={guild_id}"
+                )
                 return
 
+            try:
+                if player.playing:
+                    print(
+                        f"[ENGINE] Idle abort: player.playing "
+                        f"guild={guild_id}"
+                    )
+                    return
+            except Exception:
+                pass
+
+            try:
+                if player.paused:
+                    print(
+                        f"[ENGINE] Idle abort: player.paused "
+                        f"guild={guild_id}"
+                    )
+                    return
+            except Exception:
+                pass
+
             if state.queue.all():
+                print(
+                    f"[ENGINE] Idle abort: queue not empty "
+                    f"guild={guild_id}"
+                )
                 return
 
             await player.disconnect()
@@ -75,8 +115,8 @@ class MusicEngine:
                 f"guild={guild_id}"
             )
 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[ENGINE] Idle disconnect error: {e}")
 
         finally:
             try:
@@ -95,7 +135,7 @@ class MusicEngine:
 
         state.queue.add(track)
 
-        # user added music -> cancel idle disconnect
+        # new music means we're not idle
         self._cancel_idle_timer(guild_id)
 
         # safer than player.playing during transitions
@@ -120,24 +160,38 @@ class MusicEngine:
 
             track = state.queue.next()
 
-            # =================================================
+            print(
+                f"[ENGINE] Next track="
+                f"{getattr(track, 'title', None)} "
+                f"guild={guild_id}"
+            )
+
+            # -------------------------------------------------
             # QUEUE EMPTY
-            # =================================================
+            # -------------------------------------------------
             if not track:
                 state.current = None
 
                 if guild_id not in self._idle_tasks:
+                    print(
+                        f"[ENGINE] Queue empty, starting idle timer "
+                        f"guild={guild_id}"
+                    )
+
                     self._idle_tasks[guild_id] = asyncio.create_task(
                         self._idle_disconnect(player)
                     )
 
                 return
 
+            # track found -> cancel idle timer immediately
+            self._cancel_idle_timer(guild_id)
+
             state.current = track
 
             try:
                 # -------------------------------------------------
-                # SMART PLAYABLE HANDLING (NO DOUBLE SEARCH BUG)
+                # SMART PLAYABLE HANDLING
                 # -------------------------------------------------
                 playable = getattr(track, "playable", None)
 
@@ -151,11 +205,8 @@ class MusicEngine:
 
                     playable = results[0]
 
-                # music resumed -> cancel idle timer
-                self._cancel_idle_timer(guild_id)
-
                 # -------------------------------------------------
-                # OPTIONAL: volume hook (safe ignore if missing)
+                # OPTIONAL VOLUME HOOK
                 # -------------------------------------------------
                 try:
                     vol = getattr(self, "get_volume", None)
@@ -168,10 +219,20 @@ class MusicEngine:
                 except Exception:
                     pass
 
+                print(
+                    f"[ENGINE] Starting playback: "
+                    f"{getattr(track, 'title', 'Unknown')}"
+                )
+
                 await player.play(playable)
 
             except Exception as e:
                 print(f"[ENGINE] play error: {e}")
+
+                try:
+                    state.current = None
+                except Exception:
+                    pass
 
                 await self._play_next(player)
 
