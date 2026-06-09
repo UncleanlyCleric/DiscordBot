@@ -89,4 +89,4 @@ class MusicResolver:
                 )
         ]
 
-    music_resolver = MusicResolver()
+music_resolver = MusicResolver()
