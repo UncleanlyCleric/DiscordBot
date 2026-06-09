@@ -2,17 +2,11 @@ import discord
 
 from services.music.manager import music_manager
 from services.music.now_playing import build_now_playing_embed
-from services.music.ui.music_player_view import MusicPlayerView
 
 
 class PlayerMessageManager:
     """
     Single source of truth for now-playing UI.
-
-    Rules:
-    - ONLY this class edits messages
-    - Engine / cog NEVER call channel.send/edit directly
-    - Always safe re-create if message is gone
     """
 
     async def update(self, guild: discord.Guild):
@@ -30,9 +24,12 @@ class PlayerMessageManager:
 
         embed = build_now_playing_embed(state)
 
-        # =====================================================
-        # FIRST TIME MESSAGE
-        # =====================================================
+        # -------------------------------------------------
+        # IMPORTANT: import UI locally (prevents cycle)
+        # -------------------------------------------------
+        from services.music.ui.music_player_view import MusicPlayerView
+
+        # FIRST MESSAGE
         if not message_id:
             msg = await channel.send(
                 embed=embed,
@@ -43,9 +40,7 @@ class PlayerMessageManager:
             state.player_channel_id = channel.id
             return
 
-        # =====================================================
-        # UPDATE EXISTING MESSAGE
-        # =====================================================
+        # UPDATE EXISTING
         try:
             msg = await channel.fetch_message(message_id)
 
@@ -55,7 +50,6 @@ class PlayerMessageManager:
             )
 
         except Exception:
-            # fallback: recreate message if deleted
             msg = await channel.send(
                 embed=embed,
                 view=MusicPlayerView()

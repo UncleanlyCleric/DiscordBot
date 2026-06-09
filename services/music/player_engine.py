@@ -90,15 +90,12 @@ class MusicEngine:
             if not state.player_channel_id:
                 return
 
-            channel = guild.get_channel(state.player_channel_id)
-            if not channel:
-                return
+            from services.music.player_message_manager import player_message_manager
 
-            await player_message_manager.update(guild, channel)
+            await player_message_manager.update(guild)
 
         except Exception:
             pass
-
     # =====================================================
     # ENQUEUE
     # =====================================================

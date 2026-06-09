@@ -25,12 +25,11 @@ class MusicPlayerView(discord.ui.View):
             return
 
         player = interaction.guild.voice_client
-
         if not player:
-            await interaction.response.defer()
-            return
+            return await interaction.response.defer()
 
         try:
+            # keep engine unaware change minimal, but consistent
             if player.paused:
                 await player.pause(False)
             else:
@@ -41,7 +40,7 @@ class MusicPlayerView(discord.ui.View):
         await interaction.response.defer()
 
     # =====================================================
-    # SKIP
+    # SKIP (FIXED)
     # =====================================================
     @discord.ui.button(
         emoji="⏭",
@@ -57,14 +56,13 @@ class MusicPlayerView(discord.ui.View):
             return
 
         player = interaction.guild.voice_client
-
         if player:
             await engine.skip(player)
 
         await interaction.response.defer()
 
     # =====================================================
-    # STOP
+    # STOP (FIXED)
     # =====================================================
     @discord.ui.button(
         emoji="⏹",
@@ -80,13 +78,7 @@ class MusicPlayerView(discord.ui.View):
             return
 
         player = interaction.guild.voice_client
-
         if player:
             await engine.stop(player)
-
-            try:
-                await player.disconnect()
-            except Exception:
-                pass
 
         await interaction.response.defer()
