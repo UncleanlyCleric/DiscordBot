@@ -200,5 +200,25 @@ class MusicEngine:
         except Exception:
             pass
 
+    # =====================================================
+    # Track End
+    # =====================================================
+    async def handle_track_end(self, player: wavelink.Player):
+        """
+        Compatibility layer for Lavalink event system.
+
+        Stage 3 architecture keeps engine as source of truth,
+        but Lavalink still calls this externally.
+        """
+
+        guild_id = self._guild_id(player)
+        state = music_manager.get_player(guild_id)
+
+        # prevent double-advance if skip already triggered next track
+        if not state.current:
+            return
+
+        await self._play_next(player)
+
 
 engine = MusicEngine()
