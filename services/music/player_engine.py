@@ -8,20 +8,20 @@ from services.music.manager import music_manager
 class MusicEngine:
 
 
-# =====================================================
-# ENQUEUE
-# =====================================================
-async def enqueue(self, player: wavelink.Player, track):
+    # =====================================================
+    # ENQUEUE
+    # =====================================================
+    async def enqueue(self, player: wavelink.Player, track):
 
-    state = music_manager.get_player(player.guild.id)
+        state = music_manager.get_player(player.guild.id)
 
-    state.queue.add(track)
+        state.queue.add(track)
 
-    logging.info(
-        "[MUSIC] Queued '%s' for guild %s",
-        getattr(track, "title", "Unknown"),
-        player.guild.id
-    )
+        logging.info(
+            "[MUSIC] Queued '%s' for guild %s",
+            getattr(track, "title", "Unknown"),
+            player.guild.id
+        )
 
     # =====================================================
     # START PLAYBACK IF IDLE
