@@ -33,5 +33,5 @@ plugins:
     sources:
       spotify: true
       applemusic: true
-      deezer: true
+      deezer: false
       yandexmusic: false
