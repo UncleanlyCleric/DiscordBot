@@ -2,7 +2,6 @@ import asyncio
 import wavelink
 
 from services.music.manager import music_manager
-from services.music.player_message_manager import player_message_manager
 
 
 class MusicEngine:
@@ -14,6 +13,7 @@ class MusicEngine:
     - safe skip fallback
     - no double advancement
     - idle disconnect safe
+    - deterministic UI updates
     """
 
     IDLE_TIMEOUT = 15
@@ -77,32 +77,6 @@ class MusicEngine:
             pass
 
     # =====================================================
-    # UI NOTIFY (NEW CORE PIECE)
-    # =====================================================
-    async def _notify_ui(self, player: wavelink.Player):
-        try:
-            guild = getattr(player, "guild", None)
-            if not guild:
-                return
-
-            state = music_manager.get_player(guild.id)
-
-            # 🔥 ALWAYS refresh state first
-            if not state.player_channel_id:
-                return
-
-            channel = guild.get_channel(state.player_channel_id)
-            if not channel:
-                return
-
-            # IMPORTANT: ensure message manager owns refresh logic
-            from services.music.player_message_manager import player_message_manager
-
-            await player_message_manager.update(guild)
-
-        except Exception:
-            pass
-    # =====================================================
     # ENQUEUE
     # =====================================================
     async def enqueue(self, player: wavelink.Player, track):
@@ -113,8 +87,18 @@ class MusicEngine:
 
         self._cancel_idle(guild_id)
 
-        # NO auto-play here anymore
-        # Playback is now fully controlled externally
+    # =====================================================
+    # START PLAYBACK (FIXED MISSING FUNCTION)
+    # =====================================================
+    async def start(self, player: wavelink.Player):
+        guild_id = self._guild_id(player)
+        state = music_manager.get_player(guild_id)
+
+        # prevent double-start
+        if state.current:
+            return
+
+        await self._play_next(player)
 
     # =====================================================
     # CORE PLAYBACK
@@ -136,7 +120,6 @@ class MusicEngine:
                         self._idle_disconnect(player)
                     )
 
-                await self._notify_ui(player)
                 return
 
             self._cancel_idle(guild_id)
@@ -159,11 +142,9 @@ class MusicEngine:
 
                 await player.play(playable)
 
-                await self._notify_ui(player)
-
             except Exception:
                 state.current = None
-                await self._play_next(player)
+                return await self._play_next(player)
 
     # =====================================================
     # TRACK END
@@ -183,7 +164,6 @@ class MusicEngine:
     async def skip(self, player: wavelink.Player):
         guild_id = self._guild_id(player)
 
-        # mark skip so track_end doesn't double-fire logic
         self._skip_guard.add(guild_id)
 
         try:
@@ -191,7 +171,8 @@ class MusicEngine:
         except Exception:
             pass
 
-        # IMPORTANT: immediately force next track + UI
+        await asyncio.sleep(0.1)
+
         await self._play_next(player)
 
     # =====================================================
@@ -211,8 +192,6 @@ class MusicEngine:
             await player.stop()
         except Exception:
             pass
-
-        await self._notify_ui(player)
 
 
 engine = MusicEngine()
