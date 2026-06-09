@@ -9,11 +9,8 @@ SPOTIFY = r"open\.spotify\.com"
 
 class MusicResolver:
     """
-    Production-safe resolver:
-    - supports search queries
-    - supports Apple Music URLs (fallback)
-    - supports Spotify URLs (fallback)
-    - returns SINGLE track unless playlist
+    Production-safe resolver.
+    Compatible with strict Track schema.
     """
 
     async def resolve(self, query: str, requester_id: int):
@@ -24,7 +21,7 @@ class MusicResolver:
             return []
 
         # =====================================================
-        # URL DETECTION (Apple / Spotify)
+        # URL DETECTION
         # =====================================================
         if re.search(APPLE_MUSIC, query) or re.search(SPOTIFY, query):
             query = await self._convert_url(query)
@@ -41,7 +38,7 @@ class MusicResolver:
         tracks = []
 
         # =====================================================
-        # PLAYLIST SUPPORT (ONLY CASE MULTI IS ALLOWED)
+        # PLAYLIST HANDLING
         # =====================================================
         if isinstance(results, wavelink.Playlist):
 
@@ -51,7 +48,6 @@ class MusicResolver:
                         title=item.title,
                         uri=item.uri,
                         author=getattr(item, "author", None),
-                        source=str(getattr(item, "source", None)),
                         requester_id=requester_id,
                     )
                 )
@@ -59,17 +55,15 @@ class MusicResolver:
             return tracks
 
         # =====================================================
-        # SINGLE TRACK MODE (SPOTIFY BEHAVIOR)
+        # SINGLE TRACK ONLY (SPOTIFY MODE)
         # =====================================================
-
-        top = results[0]  # ALWAYS ONLY FIRST RESULT
+        top = results[0]
 
         tracks.append(
             Track(
                 title=top.title,
                 uri=top.uri,
                 author=getattr(top, "author", None),
-                source=str(getattr(top, "source", None)),
                 requester_id=requester_id,
             )
         )
@@ -77,29 +71,22 @@ class MusicResolver:
         return tracks
 
     # =====================================================
-    # URL NORMALIZER (SAFE FALLBACK)
+    # URL NORMALIZER
     # =====================================================
     async def _convert_url(self, url: str) -> str:
-        """
-        Convert Spotify/Apple Music URLs into search queries.
 
-        NOTE:
-        Real production systems use Spotify/Apple APIs.
-        This is a fallback heuristic.
-        """
-
-        # strip protocol
         cleaned = re.sub(r"https?://", "", url)
 
-        # remove domain noise
-        cleaned = re.sub(r"(music\.apple\.com|open\.spotify\.com)", "", cleaned)
+        cleaned = re.sub(
+            r"(music\.apple\.com|open\.spotify\.com)",
+            "",
+            cleaned
+        )
 
-        # convert separators into search terms
         cleaned = cleaned.replace("/", " ")
         cleaned = cleaned.replace("-", " ")
         cleaned = cleaned.replace("_", " ")
 
-        # collapse whitespace
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
         return cleaned
