@@ -1,4 +1,6 @@
+import logging
 import discord
+
 from services.music.manager import music_manager
 from services.music.now_playing import build_now_playing_embed
 
@@ -9,13 +11,13 @@ class MusicPlayerView(discord.ui.View):
         super().__init__(timeout=None)
 
     # =====================================================
-    # SAFE STATE RESOLVE
+    # SAFE STATE (ONLY USE GUILD ID)
     # =====================================================
-    def _state(self, interaction: discord.Interaction):
-        return music_manager.get_player(interaction.guild.id)
+    def _state(self, guild_id: int):
+        return music_manager.get_player(guild_id)
 
-    def _refresh(self, interaction: discord.Interaction):
-        state = self._state(interaction)
+    def _embed(self, guild_id: int):
+        state = self._state(guild_id)
         return build_now_playing_embed(state)
 
     # =====================================================
@@ -26,82 +28,79 @@ class MusicPlayerView(discord.ui.View):
         style=discord.ButtonStyle.secondary,
         custom_id="music_pause_resume"
     )
-    async def pause_resume(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        if not interaction.guild:
-            return
+    async def pause_resume(self, interaction: discord.Interaction, button: discord.ui.Button):
 
-        player = interaction.guild.voice_client
-        if player:
-            try:
+        logging.info("[UI] pause_resume")
+
+        try:
+            player = interaction.guild.voice_client
+
+            if player:
                 await player.pause(not player.paused)
-            except Exception:
-                pass
 
-        embed = self._refresh(interaction)
+            await interaction.response.edit_message(
+                embed=self._embed(interaction.guild.id),
+                view=self
+            )
 
-        await interaction.response.edit_message(
-            embed=embed,
-            view=self
-        )
+        except Exception:
+            logging.exception("[UI] pause_resume failed")
 
     # =====================================================
-    # SKIP (NO ENGINE IMPORT — FIXED)
+    # SKIP
     # =====================================================
     @discord.ui.button(
         emoji="⏭",
         style=discord.ButtonStyle.primary,
         custom_id="music_skip"
     )
-    async def skip(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        if not interaction.guild:
-            return
+    async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
 
-        player = interaction.guild.voice_client
+        logging.info("[UI] skip")
 
-        if player:
-            from services.music.player_engine import engine  # ✅ lazy import FIX
-            await engine.skip(player)
+        try:
+            player = interaction.guild.voice_client
 
-        embed = self._refresh(interaction)
+            if player:
+                from services.music.player_engine import engine
+                await engine.skip(player)
 
-        await interaction.response.edit_message(
-            embed=embed,
-            view=self
-        )
+            await interaction.response.edit_message(
+                embed=self._embed(interaction.guild.id),
+                view=self
+            )
+
+        except Exception:
+            logging.exception("[UI] skip failed")
 
     # =====================================================
-    # STOP (NO ENGINE IMPORT — FIXED)
+    # STOP
     # =====================================================
     @discord.ui.button(
         emoji="⏹",
         style=discord.ButtonStyle.danger,
         custom_id="music_stop"
     )
-    async def stop(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        if not interaction.guild:
-            return
+    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
 
-        player = interaction.guild.voice_client
+        logging.info("[UI] stop")
 
-        if player:
-            from services.music.player_engine import engine  # ✅ lazy import FIX
-            await engine.stop(player)
+        try:
+            player = interaction.guild.voice_client
 
-        embed = self._refresh(interaction)
+            if player:
+                from services.music.player_engine import engine
+                await engine.stop(player)
 
-        await interaction.response.edit_message(
-            embed=embed,
-            view=self
-        )
+                try:
+                    await player.disconnect()
+                except Exception:
+                    pass
+
+            await interaction.response.edit_message(
+                embed=self._embed(interaction.guild.id),
+                view=self
+            )
+
+        except Exception:
+            logging.exception("[UI] stop failed")
