@@ -145,6 +145,54 @@ class MusicPlayerView(discord.ui.View):
         )
 
     # =====================================================
+    # TRACK LOOP
+    # =====================================================
+
+    @discord.ui.button(
+        emoji="🔂",
+        style=discord.ButtonStyle.secondary,
+        custom_id="music_loop_track",
+        row=1
+    )
+    async def loop_track(self, interaction, button):
+
+        state = self._state(interaction.guild.id)
+
+        state.loop_track = not state.loop_track
+
+        if state.loop_track:
+            state.loop_queue = False
+
+        await interaction.response.edit_message(
+            embed=self._refresh_embed(interaction.guild.id),
+            view=self
+        )
+
+    # =====================================================
+    # QUEUE LOOP
+    # =====================================================
+
+    @discord.ui.button(
+        emoji="🔁",
+        style=discord.ButtonStyle.secondary,
+        custom_id="music_loop_queue",
+        row=1
+    )
+    async def loop_queue(self, interaction, button):
+
+        state = self._state(interaction.guild.id)
+
+        state.loop_queue = not state.loop_queue
+
+        if state.loop_queue:
+            state.loop_track = False
+
+        await interaction.response.edit_message(
+            embed=self._refresh_embed(interaction.guild.id),
+            view=self
+        )
+
+    # =====================================================
     # VOLUME DOWN
     # =====================================================
 
@@ -157,16 +205,20 @@ class MusicPlayerView(discord.ui.View):
     async def volume_down(self, interaction, button):
 
         player = interaction.guild.voice_client
+        state = self._state(interaction.guild.id)
 
         if player:
 
             try:
 
-                current = getattr(player, "volume", 100)
+                state.volume = max(
+                    0,
+                    state.volume - 10
+                )
 
-                new_volume = max(0, current - 10)
-
-                await player.set_volume(new_volume)
+                await player.set_volume(
+                    state.volume
+                )
 
             except Exception:
                 pass
@@ -189,16 +241,20 @@ class MusicPlayerView(discord.ui.View):
     async def volume_up(self, interaction, button):
 
         player = interaction.guild.voice_client
+        state = self._state(interaction.guild.id)
 
         if player:
 
             try:
 
-                current = getattr(player, "volume", 100)
+                state.volume = min(
+                    200,
+                    state.volume + 10
+                )
 
-                new_volume = min(200, current + 10)
-
-                await player.set_volume(new_volume)
+                await player.set_volume(
+                    state.volume
+                )
 
             except Exception:
                 pass

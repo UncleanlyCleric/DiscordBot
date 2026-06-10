@@ -6,9 +6,6 @@ from services.music.queue import MusicQueue
 
 @dataclass
 class MusicState:
-    """
-    Per-guild music state container.
-    """
 
     queue: MusicQueue = field(
         default_factory=MusicQueue
@@ -16,13 +13,20 @@ class MusicState:
 
     current: Any = None
 
-    # UI tracking
     player_message_id: Optional[int] = None
     player_channel_id: Optional[int] = None
 
-    # timing
     current_started_at: Optional[float] = None
     current_duration: Optional[int] = None
+
+    # UI / playback settings
+
+    volume: int = 100
+
+    loop_track: bool = False
+    loop_queue: bool = False
+
+    last_track: Any = None
 
 
 class MusicManager:
