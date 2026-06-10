@@ -3,6 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 
 import wavelink
+import logging
 
 from services.music.resolver import music_resolver
 from services.music.manager import music_manager
@@ -151,31 +152,21 @@ class MusicCog(commands.Cog):
     # WAVELINK TRACK END
     # =====================================================
     @commands.Cog.listener()
-    async def on_wavelink_track_end(
-        self,
-        payload: wavelink.TrackEndEventPayload
-    ):
+    async def on_wavelink_track_end(self, payload):
+
+        logging.warning(
+            "[COG TRACK END] reason=%s",
+            getattr(payload, "reason", None)
+        )
 
         try:
-
-            from services.music.player_engine import engine
-
-            logging.info(
-                "[TRACK_END] reason=%s guild=%s",
-                payload.reason,
-                payload.player.guild.id
-            )
-
-            if str(payload.reason).lower() != "finished":
-                return
-
             await engine.handle_track_end(
                 payload.player
             )
 
         except Exception:
             logging.exception(
-                "[TRACK_END] failed"
+                "[COG TRACK END] failed"
             )
 
 

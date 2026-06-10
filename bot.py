@@ -139,9 +139,10 @@ class DiscordBot(commands.Bot):
 
         try:
 
-            logging.info(
-                "[WAVELINK_EVENT] %s",
-                payload.__class__.__name__
+            logging.warning(
+                "[WAVELINK_EVENT] class=%s payload=%s",
+                payload.__class__.__name__,
+                payload
             )
 
             from services.music.player_engine import engine
@@ -151,62 +152,21 @@ class DiscordBot(commands.Bot):
                 wavelink.TrackEndEventPayload
             ):
 
-                logging.info(
+                logging.warning(
                     "[TRACK_END] reason=%s guild=%s",
                     payload.reason,
                     payload.player.guild.id
                 )
 
-                if str(payload.reason).lower() == "finished":
-
-                    logging.info(
-                        "[TRACK_END] advancing queue"
-                    )
-
-                    await engine.handle_track_end(
-                        payload.player
-                    )
+                await engine.handle_track_end(
+                    payload.player
+                )
 
         except Exception:
             logging.exception(
                 "[WAVELINK_EVENT] failed"
             )
 
-    # =====================================================
-    # TRACK END
-    # =====================================================
-    async def on_wavelink_track_end(
-        self,
-        payload
-    ):
-
-        logging.warning(
-            "[TRACK_END_EVENT] FIRED payload=%s",
-            payload
-        )
-
-        try:
-
-            from services.music.player_engine import engine
-
-            logging.warning(
-                "[TRACK_END_EVENT] reason=%s",
-                getattr(payload, "reason", None)
-            )
-
-            logging.warning(
-                "[TRACK_END_EVENT] player=%s",
-                getattr(payload, "player", None)
-            )
-
-            await engine.handle_track_end(
-                payload.player
-            )
-
-        except Exception:
-            logging.exception(
-                "[TRACK_END_EVENT] FAILED"
-            )
     # =====================================================
     # NODE READY
     # =====================================================
