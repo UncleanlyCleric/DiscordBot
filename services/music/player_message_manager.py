@@ -35,12 +35,6 @@ class PlayerMessageManager:
 
         view = MusicPlayerView()
 
-        logging.warning(
-            "[UI] buttons=%s guild=%s",
-            len(view.children),
-            guild.id
-        )
-
         message = None
 
         if state.player_message_id:
@@ -81,12 +75,6 @@ class PlayerMessageManager:
 
                 state.player_message_id = msg.id
 
-                logging.info(
-                    "[UI] created message=%s buttons=%s",
-                    msg.id,
-                    len(view.children)
-                )
-
             except Exception:
 
                 logging.exception(
@@ -103,12 +91,6 @@ class PlayerMessageManager:
             await message.edit(
                 embed=embed,
                 view=view
-            )
-
-            logging.info(
-                "[UI] updated message=%s buttons=%s",
-                message.id,
-                len(view.children)
             )
 
         except discord.NotFound:

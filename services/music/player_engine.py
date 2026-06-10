@@ -58,19 +58,9 @@ class MusicEngine:
 
         state = music_manager.get_player(player.guild.id)
 
-        logging.info(
-            "[PLAY_NEXT] queue size before=%s",
-            len(state.queue.all())
-        )
-
         next_track = state.queue.next()
 
         if not next_track:
-
-            logging.info(
-                "[PLAY_NEXT] queue empty guild=%s",
-                player.guild.id
-            )
 
             state.current = None
             state.current_started_at = None
@@ -153,10 +143,6 @@ class MusicEngine:
         state.current_duration = None
 
         await asyncio.sleep(0.25)
-
-        logging.info(
-            "[TRACK_END] calling _play_next()"
-        )
 
         await self._play_next(player)
 
