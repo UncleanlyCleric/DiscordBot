@@ -1,219 +1,131 @@
+import logging
 import discord
 
 from services.music.manager import music_manager
+from services.music.ui.music_player_view import MusicPlayerView
 from services.music.now_playing import build_now_playing_embed
 
 
-class MusicPlayerView(discord.ui.View):
+class PlayerMessageManager:
 
-    def __init__(self):
-        super().__init__(timeout=None)
+    async def update(self, guild: discord.Guild):
 
-    # =====================================================
-    def _state(self, guild_id: int):
-        return music_manager.get_player(guild_id)
+        state = music_manager.get_player(guild.id)
 
-    def _refresh_embed(self, guild_id: int):
+        if not state.player_channel_id:
+            logging.warning(
+                "[UI] no player_channel_id guild=%s",
+                guild.id
+            )
+            return
 
-        state = self._state(guild_id)
-
-        return build_now_playing_embed(
-            state
+        channel = guild.get_channel(
+            state.player_channel_id
         )
 
-    # =====================================================
-    # PAUSE / RESUME
-    # =====================================================
-    @discord.ui.button(
-        emoji="⏯",
-        style=discord.ButtonStyle.secondary,
-        custom_id="music_pause_resume"
-    )
-    async def pause_resume(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
+        if not channel:
+            logging.warning(
+                "[UI] channel missing guild=%s channel=%s",
+                guild.id,
+                state.player_channel_id
+            )
+            return
 
-        player = (
-            interaction.guild.voice_client
-            if interaction.guild
-            else None
+        embed = build_now_playing_embed(state)
+
+        view = MusicPlayerView()
+
+        logging.warning(
+            "[UI] buttons=%s guild=%s",
+            len(view.children),
+            guild.id
         )
 
-        if player:
+        message = None
+
+        if state.player_message_id:
 
             try:
-                await player.pause(
-                    not player.paused
+
+                message = await channel.fetch_message(
+                    state.player_message_id
                 )
+
+            except discord.NotFound:
+
+                logging.warning(
+                    "[UI] message missing recreating"
+                )
+
+                message = None
+                state.player_message_id = None
+
             except Exception:
-                pass
 
-        embed = self._refresh_embed(
-            interaction.guild.id
-        )
+                logging.exception(
+                    "[UI] fetch failed"
+                )
+                return
 
-        await interaction.response.edit_message(
-            embed=embed,
-            view=self
-        )
+        # =====================================================
+        # CREATE
+        # =====================================================
+        if message is None:
 
-    # =====================================================
-    # SKIP
-    # =====================================================
-    @discord.ui.button(
-        emoji="⏭",
-        style=discord.ButtonStyle.primary,
-        custom_id="music_skip"
-    )
-    async def skip(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
+            try:
 
-        player = (
-            interaction.guild.voice_client
-            if interaction.guild
-            else None
-        )
+                msg = await channel.send(
+                    embed=embed,
+                    view=view
+                )
 
-        if player:
+                state.player_message_id = msg.id
 
-            from services.music.player_engine import engine
+                logging.info(
+                    "[UI] created message=%s buttons=%s",
+                    msg.id,
+                    len(view.children)
+                )
 
-            await engine.skip(player)
+            except Exception:
 
-        embed = self._refresh_embed(
-            interaction.guild.id
-        )
+                logging.exception(
+                    "[UI] failed create"
+                )
 
-        await interaction.response.edit_message(
-            embed=embed,
-            view=self
-        )
+            return
 
-    # =====================================================
-    # SHUFFLE
-    # =====================================================
-    @discord.ui.button(
-        emoji="🔀",
-        style=discord.ButtonStyle.success,
-        custom_id="music_shuffle"
-    )
-    async def shuffle(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
+        # =====================================================
+        # UPDATE
+        # =====================================================
+        try:
 
-        state = self._state(
-            interaction.guild.id
-        )
-
-        if len(state.queue) > 1:
-            state.queue.shuffle()
-
-        embed = self._refresh_embed(
-            interaction.guild.id
-        )
-
-        await interaction.response.edit_message(
-            embed=embed,
-            view=self
-        )
-
-    # =====================================================
-    # QUEUE
-    # =====================================================
-    @discord.ui.button(
-        emoji="📜",
-        style=discord.ButtonStyle.secondary,
-        custom_id="music_queue"
-    )
-    async def queue(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-
-        state = self._state(
-            interaction.guild.id
-        )
-
-        tracks = state.queue.first(15)
-
-        if not tracks:
-
-            return await interaction.response.send_message(
-                "Queue empty.",
-                ephemeral=True
+            await message.edit(
+                embed=embed,
+                view=view
             )
 
-        lines = []
-
-        current = getattr(
-            state,
-            "current",
-            None
-        )
-
-        if current:
-
-            lines.append(
-                f"▶ Now Playing\n{current.title}\n"
+            logging.info(
+                "[UI] updated message=%s buttons=%s",
+                message.id,
+                len(view.children)
             )
 
-        lines.append(
-            "Up Next:"
-        )
+        except discord.NotFound:
 
-        for i, track in enumerate(
-            tracks,
-            start=1
-        ):
-
-            lines.append(
-                f"{i}. {track.title}"
+            logging.warning(
+                "[UI] update target missing recreating"
             )
 
-        await interaction.response.send_message(
-            "\n".join(lines),
-            ephemeral=True
-        )
+            state.player_message_id = None
 
-    # =====================================================
-    # STOP
-    # =====================================================
-    @discord.ui.button(
-        emoji="⏹",
-        style=discord.ButtonStyle.danger,
-        custom_id="music_stop"
-    )
-    async def stop(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
+            await self.update(guild)
 
-        player = (
-            interaction.guild.voice_client
-            if interaction.guild
-            else None
-        )
+        except Exception:
 
-        if player:
+            logging.exception(
+                "[UI] failed update"
+            )
 
-            from services.music.player_engine import engine
 
-            await engine.stop(player)
-
-        embed = self._refresh_embed(
-            interaction.guild.id
-        )
-
-        await interaction.response.edit_message(
-            embed=embed,
-            view=self
-        )
+player_message_manager = PlayerMessageManager()
