@@ -4,13 +4,17 @@ import wavelink
 from services.music.models import Track
 from services.music.smart_rank import pick_best
 
-APPLE_MUSIC = r"music.apple.com"
-SPOTIFY = r"open.spotify.com"
+APPLE_MUSIC = r"music\.apple\.com"
+SPOTIFY = r"open\.spotify\.com"
 
 
 class MusicResolver:
 
-    async def resolve(self, query: str, requester_id: int):
+    async def resolve(
+        self,
+        query: str,
+        requester_id: int
+    ):
 
         query = query.strip()
 
@@ -18,35 +22,48 @@ class MusicResolver:
             return []
 
         try:
-            results = await wavelink.Playable.search(query)
+            results = await wavelink.Playable.search(
+                query
+            )
 
-        except Exception as e:
-            print(f"[Resolver] search failed: {e}")
+        except Exception:
             return []
 
         if not results:
             return []
 
         # =====================================================
-        # FIX 1: REAL PLAYLIST SUPPORT (LavaSrc-safe)
+        # PLAYLISTS
         # =====================================================
-        # Some Lavalink setups return playlists via attribute, not type
-        playlist = getattr(results, "playlist", None)
 
-        if playlist or isinstance(results, wavelink.Playlist):
+        playlist = getattr(
+            results,
+            "playlist",
+            None
+        )
 
-            tracks = getattr(results, "tracks", results)
+        if (
+            playlist
+            or isinstance(
+                results,
+                wavelink.Playlist
+            )
+        ):
 
-            print(
-                f"[Resolver] Playlist detected: "
-                f"{getattr(results, 'name', 'unknown')} "
-                f"({len(tracks)} tracks)"
+            tracks = getattr(
+                results,
+                "tracks",
+                results
             )
 
             return [
                 Track(
                     title=t.title,
-                    author=getattr(t, "author", None),
+                    author=getattr(
+                        t,
+                        "author",
+                        None
+                    ),
                     uri=t.uri,
                     requester_id=requester_id,
                     playable=t,
@@ -55,45 +72,46 @@ class MusicResolver:
             ]
 
         # =====================================================
-        # FIX 2: URL HANDLING (Apple Music / Spotify SAFE PATH)
+        # URLS
         # =====================================================
-        if (
-            re.search(APPLE_MUSIC, query)
-            or re.search(SPOTIFY, query)
-            or query.startswith("http")
-        ):
 
-            # Apple Music often returns multiple results even for URLs
-            if isinstance(results, list) and len(results) > 1:
-                print(f"[Resolver] URL multi-result fallback: {len(results)} tracks")
+        is_url = (
+            query.startswith("http")
+            or re.search(
+                APPLE_MUSIC,
+                query
+            )
+            or re.search(
+                SPOTIFY,
+                query
+            )
+        )
 
-                return [
-                    Track(
-                        title=t.title,
-                        author=getattr(t, "author", None),
-                        uri=t.uri,
-                        requester_id=requester_id,
-                        playable=t,
-                    )
-                    for t in results
-                ]
-
-            first = results[0]
+        if is_url:
 
             return [
                 Track(
-                    title=first.title,
-                    author=getattr(first, "author", None),
-                    uri=first.uri,
+                    title=t.title,
+                    author=getattr(
+                        t,
+                        "author",
+                        None
+                    ),
+                    uri=t.uri,
                     requester_id=requester_id,
-                    playable=first,
+                    playable=t,
                 )
+                for t in results
             ]
 
         # =====================================================
         # TEXT SEARCH
         # =====================================================
-        best = pick_best(results, query)
+
+        best = pick_best(
+            results,
+            query
+        )
 
         if not best:
             return []
@@ -101,7 +119,11 @@ class MusicResolver:
         return [
             Track(
                 title=best.title,
-                author=getattr(best, "author", None),
+                author=getattr(
+                    best,
+                    "author",
+                    None
+                ),
                 uri=best.uri,
                 requester_id=requester_id,
                 playable=best,

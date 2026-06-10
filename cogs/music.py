@@ -3,7 +3,6 @@ from discord import app_commands
 from discord.ext import commands
 
 import wavelink
-import logging
 
 from services.music.resolver import music_resolver
 from services.music.manager import music_manager
@@ -16,7 +15,10 @@ class MusicCog(commands.Cog):
         self.bot = bot
 
     # =====================================================
-    async def _get_player(self, interaction: discord.Interaction):
+    async def _get_player(
+        self,
+        interaction: discord.Interaction
+    ):
 
         if not interaction.guild:
             return None
@@ -29,6 +31,7 @@ class MusicCog(commands.Cog):
         player = interaction.guild.voice_client
 
         if not player:
+
             player = await voice.channel.connect(
                 cls=wavelink.Player
             )
@@ -37,11 +40,17 @@ class MusicCog(commands.Cog):
 
     # =====================================================
     @app_commands.command(name="play")
-    async def play(self, interaction: discord.Interaction, query: str):
+    async def play(
+        self,
+        interaction: discord.Interaction,
+        query: str
+    ):
 
         await interaction.response.defer()
 
-        player = await self._get_player(interaction)
+        player = await self._get_player(
+            interaction
+        )
 
         if not player:
             return await interaction.followup.send(
@@ -52,7 +61,9 @@ class MusicCog(commands.Cog):
             interaction.guild_id
         )
 
-        state.player_channel_id = interaction.channel.id
+        state.player_channel_id = (
+            interaction.channel.id
+        )
 
         tracks = await music_resolver.resolve(
             query,
@@ -65,17 +76,28 @@ class MusicCog(commands.Cog):
             )
 
         for track in tracks:
-            await engine.enqueue(player, track)
+            await engine.enqueue(
+                player,
+                track
+            )
 
         await engine.start(player)
 
         await interaction.followup.send(
-            f"🎵 Queued: **{tracks[0].title}** (+{len(tracks)-1})"
+            f"🎵 Queued: **{tracks[0].title}**"
+            + (
+                f" (+{len(tracks)-1})"
+                if len(tracks) > 1
+                else ""
+            )
         )
 
     # =====================================================
     @app_commands.command(name="stop")
-    async def stop(self, interaction: discord.Interaction):
+    async def stop(
+        self,
+        interaction: discord.Interaction
+    ):
 
         await interaction.response.defer(
             ephemeral=True
@@ -92,7 +114,10 @@ class MusicCog(commands.Cog):
 
     # =====================================================
     @app_commands.command(name="skip")
-    async def skip(self, interaction: discord.Interaction):
+    async def skip(
+        self,
+        interaction: discord.Interaction
+    ):
 
         await interaction.response.defer(
             ephemeral=True
@@ -109,7 +134,10 @@ class MusicCog(commands.Cog):
 
     # =====================================================
     @app_commands.command(name="pause")
-    async def pause(self, interaction: discord.Interaction):
+    async def pause(
+        self,
+        interaction: discord.Interaction
+    ):
 
         await interaction.response.defer(
             ephemeral=True
@@ -118,6 +146,7 @@ class MusicCog(commands.Cog):
         player = interaction.guild.voice_client
 
         if player:
+
             try:
                 await player.pause(True)
             except Exception:
@@ -129,7 +158,10 @@ class MusicCog(commands.Cog):
 
     # =====================================================
     @app_commands.command(name="resume")
-    async def resume(self, interaction: discord.Interaction):
+    async def resume(
+        self,
+        interaction: discord.Interaction
+    ):
 
         await interaction.response.defer(
             ephemeral=True
@@ -138,6 +170,7 @@ class MusicCog(commands.Cog):
         player = interaction.guild.voice_client
 
         if player:
+
             try:
                 await player.pause(False)
             except Exception:
@@ -148,93 +181,139 @@ class MusicCog(commands.Cog):
         )
 
     # =====================================================
-    @app_commands.command(name="queue")
-    async def queue(self, interaction: discord.Interaction):
+    @app_commands.command(name="shuffle")
+    async def shuffle(
+        self,
+        interaction: discord.Interaction
+    ):
 
         state = music_manager.get_player(
             interaction.guild_id
         )
 
-        tracks = state.queue.all()
-
-        if not tracks:
+        if len(state.queue) < 2:
             return await interaction.response.send_message(
-                "Queue empty."
+                "Need at least 2 queued tracks.",
+                ephemeral=True
             )
 
-        msg = "\n".join(
-            f"{i+1}. {t.title}"
-            for i, t in enumerate(tracks[:10])
-        )
+        state.queue.shuffle()
 
         await interaction.response.send_message(
-            msg
+            "🔀 Queue shuffled."
         )
 
     # =====================================================
-    # DEBUG PLAYER
-    # =====================================================
-    @app_commands.command(name="debugplayer")
-    async def debugplayer(
+    @app_commands.command(name="volume")
+    async def volume(
         self,
-        interaction: discord.Interaction
+        interaction: discord.Interaction,
+        percent: app_commands.Range[int, 1, 200]
     ):
 
         player = interaction.guild.voice_client
 
         if not player:
             return await interaction.response.send_message(
-                "No player"
+                "Nothing is playing.",
+                ephemeral=True
+            )
+
+        await player.set_volume(percent)
+
+        await interaction.response.send_message(
+            f"🔊 Volume set to {percent}%"
+        )
+
+    # =====================================================
+    @app_commands.command(name="queue")
+    async def queue(
+        self,
+        interaction: discord.Interaction
+    ):
+
+        state = music_manager.get_player(
+            interaction.guild_id
+        )
+
+        tracks = state.queue.first(15)
+
+        if not tracks:
+
+            current = getattr(
+                state,
+                "current",
+                None
+            )
+
+            if current:
+                return await interaction.response.send_message(
+                    f"▶ Now Playing\n\n{current.title}"
+                )
+
+            return await interaction.response.send_message(
+                "Queue empty."
+            )
+
+        lines = []
+
+        current = getattr(
+            state,
+            "current",
+            None
+        )
+
+        if current:
+            lines.append(
+                f"▶ **Now Playing**\n{current.title}\n"
+            )
+
+        lines.append(
+            "**Up Next**"
+        )
+
+        for i, track in enumerate(
+            tracks,
+            start=1
+        ):
+            lines.append(
+                f"{i}. {track.title}"
             )
 
         await interaction.response.send_message(
-            f"""
-playing={player.playing}
-paused={player.paused}
-position={player.position}
-connected={player.connected}
-type={type(player)}
-module={player.__class__.__module__}
-class={player.__class__.__name__}
-"""
+            "\n".join(lines)
         )
 
     # =====================================================
     # TRACK START
     # =====================================================
     @commands.Cog.listener()
-    async def on_wavelink_track_start(self, payload):
-
-        logging.warning(
-            "[TRACK_START] %s",
-            getattr(
-                payload.track,
-                "title",
-                "unknown"
-            )
-        )
+    async def on_wavelink_track_start(
+        self,
+        payload
+    ):
+        pass
 
     # =====================================================
     # TRACK END
     # =====================================================
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, payload):
-
-        logging.warning(
-            "[TRACK_END] reason=%s",
-            getattr(payload, "reason", None)
-        )
+    async def on_wavelink_track_end(
+        self,
+        payload
+    ):
 
         try:
+
             await engine.handle_track_end(
                 payload.player
             )
 
         except Exception:
-            logging.exception(
-                "[TRACK_END] failed"
-            )
+            pass
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(MusicCog(bot))
+    await bot.add_cog(
+        MusicCog(bot)
+    )
