@@ -112,8 +112,9 @@ class DiscordBot(commands.Bot):
     # =====================================================
     # 🚨 IMPORTANT: DO NOTHING HERE (ENGINE OWNS FLOW)
     # =====================================================
-    async def on_wavelink_track_end(self, payload):
-        return
+    @bot.event
+    async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
+        await engine.handle_track_end(payload.player)
 
     # =====================================================
     async def on_wavelink_node_ready(self, payload):

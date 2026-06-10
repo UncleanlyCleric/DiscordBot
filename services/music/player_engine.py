@@ -3,7 +3,9 @@ import asyncio
 import logging
 
 import wavelink
+
 from services.music.manager import music_manager
+from services.music.player_message_manager import player_message_manager
 
 
 class MusicEngine:
@@ -11,6 +13,8 @@ class MusicEngine:
     def __init__(self):
         self._ui_tasks = {}
 
+    # =====================================================
+    # ENQUEUE
     # =====================================================
     async def enqueue(self, player: wavelink.Player, track):
 
@@ -25,15 +29,20 @@ class MusicEngine:
         )
 
     # =====================================================
+    # START
+    # =====================================================
     async def start(self, player: wavelink.Player):
 
         state = music_manager.get_player(player.guild.id)
 
         if state.current:
+            logging.info("[MUSIC] start() ignored, already playing")
             return
 
         await self._play_next(player)
 
+    # =====================================================
+    # PLAY NEXT
     # =====================================================
     async def _play_next(self, player: wavelink.Player):
 
@@ -41,7 +50,19 @@ class MusicEngine:
 
         next_track = state.queue.next()
 
+        logging.info(
+            "[MUSIC] handle_track_end() guild=%s",
+            player.guild.id
+        )
+
+        logging.info(
+            "[MUSIC] Queue size before next=%s",
+            len(state.queue.all())
+        )
+
         if not next_track:
+
+            logging.info("[MUSIC] Queue empty guild=%s", player.guild.id)
 
             state.current = None
             state.current_started_at = None
@@ -52,25 +73,42 @@ class MusicEngine:
 
         state.current = next_track
         state.current_started_at = time.time()
-        state.current_duration = getattr(
-            getattr(next_track, "playable", None),
-            "length",
-            None
+
+        duration = getattr(getattr(next_track, "playable", None), "length", None)
+        state.current_duration = duration
+
+        logging.info(
+            "[MUSIC] Next track=%s",
+            next_track.title
         )
 
         try:
             await player.play(next_track.playable)
 
         except Exception:
-            logging.exception("[MUSIC] play failed %s", next_track.title)
+            logging.exception("[MUSIC] Failed playing %s", next_track.title)
 
             state.current = None
             await self._play_next(player)
             return
 
         await self._update_ui(player)
-        self._start_ui_loop(player)
 
+    # =====================================================
+    # TRACK END HANDLER (FIXED - WAS MISSING)
+    # =====================================================
+    async def handle_track_end(self, player: wavelink.Player):
+
+        state = music_manager.get_player(player.guild.id)
+
+        state.current = None
+        state.current_started_at = None
+        state.current_duration = None
+
+        await self._play_next(player)
+
+    # =====================================================
+    # SKIP (NO UI CALLS HERE)
     # =====================================================
     async def skip(self, player: wavelink.Player):
 
@@ -87,13 +125,14 @@ class MusicEngine:
         except Exception:
             pass
 
-        # IMPORTANT: ONLY ONE PATH
-        await self._play_next(player)
-
+    # =====================================================
+    # STOP (NO UI CALLS HERE)
     # =====================================================
     async def stop(self, player: wavelink.Player):
 
         state = music_manager.get_player(player.guild.id)
+
+        logging.info("[MUSIC] stop() guild=%s", player.guild.id)
 
         state.queue.clear()
 
@@ -103,40 +142,37 @@ class MusicEngine:
 
         try:
             await player.stop()
+        except Exception:
+            pass
+
+        try:
             await player.disconnect()
         except Exception:
             pass
 
         await self._update_ui(player)
 
-        task = self._ui_tasks.pop(player.guild.id, None)
-        if task:
-            task.cancel()
-
+    # =====================================================
+    # UI UPDATE (ONLY ENGINE OWNS THIS NOW)
     # =====================================================
     async def _update_ui(self, player):
 
         try:
-            from services.music.player_message_manager import player_message_manager
-
-            # IMPORTANT: SINGLE UPDATE ONLY
             await player_message_manager.update(player.guild)
-
         except Exception:
             logging.exception("[MUSIC] UI update failed")
 
+    # =====================================================
+    # UI LOOP (UNCHANGED BEHAVIOR, SAFE)
     # =====================================================
     def _start_ui_loop(self, player):
 
         guild_id = player.guild.id
 
-        task = self._ui_tasks.get(guild_id)
-        if task:
-            task.cancel()
+        if guild_id in self._ui_tasks:
+            self._ui_tasks[guild_id].cancel()
 
-        self._ui_tasks[guild_id] = asyncio.create_task(
-            self._ui_tick(player)
-        )
+        self._ui_tasks[guild_id] = asyncio.create_task(self._ui_tick(player))
 
     async def _ui_tick(self, player):
 

@@ -13,22 +13,17 @@ class PlayerMessageManager:
         state = music_manager.get_player(guild.id)
 
         if not state.player_channel_id:
-            logging.warning("[UI] ABORT no channel_id guild=%s", guild.id)
             return
 
         channel = guild.get_channel(state.player_channel_id)
 
         if not channel:
-            logging.warning("[UI] ABORT missing channel guild=%s", guild.id)
             return
 
         embed = build_now_playing_embed(state)
 
         message = None
 
-        # =====================================================
-        # resolve existing message safely
-        # =====================================================
         if state.player_message_id:
             try:
                 message = await channel.fetch_message(state.player_message_id)
@@ -37,7 +32,7 @@ class PlayerMessageManager:
                 state.player_message_id = None
 
         # =====================================================
-        # create if missing
+        # CREATE MESSAGE (single source of truth)
         # =====================================================
         if message is None:
 
@@ -52,13 +47,14 @@ class PlayerMessageManager:
                 logging.info("[UI] created message=%s", msg.id)
 
             except Exception:
-                logging.exception("[UI] failed to create message")
+                logging.exception("[UI] failed create")
                 return
 
         # =====================================================
-        # update existing
+        # UPDATE MESSAGE
         # =====================================================
         else:
+
             try:
                 await message.edit(
                     embed=embed,
@@ -72,7 +68,7 @@ class PlayerMessageManager:
                 await self.update(guild)
 
             except Exception:
-                logging.exception("[UI] failed to update message")
+                logging.exception("[UI] failed update")
 
 
 player_message_manager = PlayerMessageManager()
