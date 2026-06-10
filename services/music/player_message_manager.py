@@ -54,11 +54,6 @@ class PlayerMessageManager:
 
                 state.player_message_id = msg.id
 
-                logging.info(
-                    "[UI] created message=%s",
-                    msg.id
-                )
-
             except Exception:
                 logging.exception(
                     "[UI] failed create"
@@ -74,11 +69,6 @@ class PlayerMessageManager:
                 await message.edit(
                     embed=embed,
                     view=MusicPlayerView()
-                )
-
-                logging.info(
-                    "[UI] updated message=%s",
-                    message.id
                 )
 
             except discord.NotFound:
