@@ -159,3 +159,32 @@ CREATE TABLE IF NOT EXISTS user_favorites (
 
     PRIMARY KEY (user_id, track_uri)
 );
+
+CREATE TABLE IF NOT EXISTS personality_abstracts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS personality_abstract_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    abstract_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    FOREIGN KEY (abstract_id)
+        REFERENCES personality_abstracts(id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_personality_abstracts_name
+ON personality_abstracts(name);
+
+CREATE INDEX IF NOT EXISTS idx_personality_items_abstract
+ON personality_abstract_items(abstract_id);
+
+CREATE TABLE IF NOT EXISTS personality_triggers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    trigger_type TEXT NOT NULL,
+    pattern TEXT NOT NULL,
+    priority INTEGER DEFAULT 100,
+    enabled INTEGER DEFAULT 1
+);
