@@ -184,26 +184,10 @@ class DiscordBot(commands.Bot):
         )
 
     # =====================================================
-    # WAVELINK EVENTS (FIXED SAFE DISPATCH)
+    # WAVELINK EVENTS 
     # =====================================================
     async def on_wavelink_track_end(self, payload):
-        try:
-            # ✅ SAFE ENTRY POINT (NOT PRIVATE METHOD)
-            await engine.handle_track_end(payload.player)
-        except Exception:
-            logging.exception("[MUSIC] track_end failed")
-
-    async def on_wavelink_track_exception(self, payload):
-        try:
-            await engine.handle_track_end(payload.player)
-        except Exception:
-            logging.exception("[MUSIC] track_exception failed")
-
-    async def on_wavelink_track_stuck(self, payload):
-        try:
-            await engine.handle_track_end(payload.player)
-        except Exception:
-            logging.exception("[MUSIC] track_stuck failed")
+        return
 
     # =====================================================
     # NODE READY
@@ -235,7 +219,7 @@ class DiscordBot(commands.Bot):
 
 async def main():
     bot = DiscordBot()
-
+z
     token = config.discord_token
     if not token:
         raise RuntimeError("DISCORD_TOKEN missing")

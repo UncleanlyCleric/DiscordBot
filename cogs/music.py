@@ -8,8 +8,6 @@ from services.music.resolver import music_resolver
 from services.music.manager import music_manager
 from services.music.player_engine import engine
 
-from services.music.player_message_manager import player_message_manager
-
 
 class MusicCog(commands.Cog):
 
@@ -50,15 +48,24 @@ class MusicCog(commands.Cog):
         if not tracks:
             return await interaction.followup.send("No results.")
 
+        # =====================================================
+        # ENGINE OWNED QUEUE
+        # =====================================================
         for t in tracks:
             await engine.enqueue(player, t)
 
+        # =====================================================
+        # START PLAYBACK
+        # =====================================================
         await engine.start(player)
 
+        # =====================================================
+        # SET UI CHANNEL (ONLY ONCE)
+        # =====================================================
         state = music_manager.get_player(interaction.guild_id)
         state.player_channel_id = interaction.channel.id
 
-        await player_message_manager.update(interaction.guild)
+        # ❌ REMOVED: duplicate UI update (engine now owns UI)
 
         await interaction.followup.send(
             f"🎵 Queued: **{tracks[0].title}** (+{len(tracks)-1})"
@@ -72,8 +79,15 @@ class MusicCog(commands.Cog):
 
         if player:
             await engine.stop(player)
+            try:
+                await player.disconnect()
+            except Exception:
+                pass
 
-        await interaction.response.send_message("🛑 Stopped", ephemeral=True)
+        await interaction.response.send_message(
+            "🛑 Stopped",
+            ephemeral=True
+        )
 
     # =====================================================
     @app_commands.command(name="skip")
@@ -84,7 +98,10 @@ class MusicCog(commands.Cog):
         if player:
             await engine.skip(player)
 
-        await interaction.response.send_message("⏭ Skipped", ephemeral=True)
+        await interaction.response.send_message(
+            "⏭ Skipped",
+            ephemeral=True
+        )
 
     # =====================================================
     @app_commands.command(name="pause")
@@ -98,7 +115,10 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await interaction.response.send_message("⏸ Paused", ephemeral=True)
+        await interaction.response.send_message(
+            "⏸ Paused",
+            ephemeral=True
+        )
 
     # =====================================================
     @app_commands.command(name="resume")
@@ -112,7 +132,10 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await interaction.response.send_message("▶ Resumed", ephemeral=True)
+        await interaction.response.send_message(
+            "▶ Resumed",
+            ephemeral=True
+        )
 
     # =====================================================
     @app_commands.command(name="queue")
