@@ -5,10 +5,8 @@ from pathlib import Path
 
 import discord
 from discord.ext import commands
-
 import wavelink
 
-from services.music.ui.music_player_view import MusicPlayerView
 from core.logger import setup_logging
 from core.config import config
 from core.database import db
@@ -18,6 +16,7 @@ from database.migrations import migration_runner
 from services.music.manager import music_manager
 from services.music.player_engine import engine
 from services.music.player_message_manager import player_message_manager
+from services.music.ui.music_player_view import MusicPlayerView
 
 
 sys.path.append(str(Path(__file__).resolve().parent))
@@ -58,7 +57,7 @@ class DiscordBot(commands.Bot):
         await db.connect()
 
         # =====================================================
-        # LAVALINK NODE
+        # LAVALINK
         # =====================================================
         logging.info("[LAVALINK] Connecting node...")
 
@@ -72,6 +71,14 @@ class DiscordBot(commands.Bot):
             nodes=[node]
         )
 
+        # wait for node
+        for _ in range(20):
+            if wavelink.Pool.nodes:
+                break
+            await asyncio.sleep(0.5)
+        else:
+            raise RuntimeError("Lavalink node failed to connect")
+
         logging.info("[LAVALINK] Node ready")
 
         # =====================================================
@@ -80,10 +87,8 @@ class DiscordBot(commands.Bot):
         for cog in COGS:
             try:
                 await self.load_extension(cog)
-                audit.cog_loaded(cog)
                 logging.info("[COG] Loaded %s", cog)
-            except Exception as e:
-                audit.cog_failed(cog, e)
+            except Exception:
                 logging.exception("[COG] Failed %s", cog)
 
         # =====================================================
@@ -92,56 +97,42 @@ class DiscordBot(commands.Bot):
         self.add_view(MusicPlayerView())
 
         # =====================================================
-        # COMMAND SYNC
+        # START PROGRESS LOOP
         # =====================================================
-        try:
-            global_synced = await self.tree.sync()
-            logging.info("[CMD] Global synced %s commands", len(global_synced))
+        self.loop.create_task(self.progress_updater())
 
-            guild_id = self.dev_guild_id
+    # =====================================================
+    async def progress_updater(self):
+        await self.wait_until_ready()
 
-            if not guild_id and self.guilds:
-                guild_id = self.guilds[0].id
+        while not self.is_closed():
+            try:
+                for guild in self.guilds:
+                    await player_message_manager.update(guild)
+            except Exception:
+                pass
 
-            if guild_id:
-                guild = discord.Object(id=guild_id)
-                self.tree.copy_global_to(guild=guild)
-                dev_synced = await self.tree.sync(guild=guild)
-
-                logging.info("[CMD] Dev synced %s commands", len(dev_synced))
-
-        except Exception:
-            logging.exception("[CMD] Sync failed")
+            await asyncio.sleep(5)
 
     # =====================================================
     async def on_ready(self):
         logging.info("[READY] Logged in as %s", self.user)
 
     # =====================================================
-    # 🚨 FIXED: SAFE TRACK END HANDLER
+    # ❌ FIXED: NO BROKEN HANDLER CALL
     # =====================================================
     async def on_wavelink_track_end(self, payload):
-        """
-        Replaces broken engine.handle_track_end()
-        """
-
         try:
             player = payload.player
-            guild_id = player.guild.id
-
-            state = music_manager.get_player(guild_id)
-
-            logging.info("[MUSIC] track_end guild=%s", guild_id)
+            state = music_manager.get_player(player.guild.id)
 
             queue = state.queue.all()
 
             if not queue:
-                logging.info("[MUSIC] queue empty")
+                await player_message_manager.update(player.guild)
                 return
 
             next_track = state.queue.pop()
-
-            logging.info("[MUSIC] next=%s", next_track.title)
 
             await player.play(next_track)
 
@@ -151,13 +142,7 @@ class DiscordBot(commands.Bot):
             logging.exception("[MUSIC] track_end failed safely")
 
     # =====================================================
-    async def on_wavelink_node_ready(self, payload):
-        logging.info("[LAVALINK] Node ready: %s", payload.node.identifier)
-
-    # =====================================================
     async def close(self):
-        logging.info("[SHUTDOWN] closing bot...")
-
         try:
             await wavelink.Pool.disconnect()
         except Exception:

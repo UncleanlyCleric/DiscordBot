@@ -1,7 +1,6 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-
 import wavelink
 
 from services.music.resolver import music_resolver
@@ -49,22 +48,22 @@ class MusicCog(commands.Cog):
         if not tracks:
             return await interaction.followup.send("No results.")
 
+        # =====================================================
+        # ENQUEUE ALL TRACKS
+        # =====================================================
+        for t in tracks:
+            await engine.enqueue(player, t)
+
+        # =====================================================
+        # START ONLY IF NOT PLAYING
+        # =====================================================
+        if not player.playing:
+            await engine.start(player)
+
+        # =====================================================
+        # UI INIT (ONLY ONCE)
+        # =====================================================
         state = music_manager.get_player(interaction.guild_id)
-
-        # =====================================================
-        # FIX: enqueue FULL playlist properly
-        # =====================================================
-        for track in tracks:
-            state.queue.add(track)
-
-        logging.info(
-            "[MUSIC] queued=%s guild=%s",
-            len(tracks),
-            interaction.guild_id
-        )
-
-        await engine.start(player)
-
         state.player_channel_id = interaction.channel.id
 
         await player_message_manager.update(interaction.guild)
@@ -81,7 +80,6 @@ class MusicCog(commands.Cog):
 
         if player:
             await engine.stop(player)
-
             try:
                 await player.disconnect()
             except Exception:
