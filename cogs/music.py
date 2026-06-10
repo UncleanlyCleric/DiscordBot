@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+
 import wavelink
 
 from services.music.resolver import music_resolver
@@ -55,17 +56,19 @@ class MusicCog(commands.Cog):
             await engine.enqueue(player, t)
 
         # =====================================================
-        # START ONLY IF NOT PLAYING
+        # START PLAYBACK
         # =====================================================
-        if not player.playing:
-            await engine.start(player)
+        await engine.start(player)
 
         # =====================================================
-        # UI INIT (ONLY ONCE)
+        # STATE SETUP
         # =====================================================
         state = music_manager.get_player(interaction.guild_id)
         state.player_channel_id = interaction.channel.id
 
+        # =====================================================
+        # SINGLE UI UPDATE (IMPORTANT)
+        # =====================================================
         await player_message_manager.update(interaction.guild)
 
         await interaction.followup.send(
@@ -80,10 +83,6 @@ class MusicCog(commands.Cog):
 
         if player:
             await engine.stop(player)
-            try:
-                await player.disconnect()
-            except Exception:
-                pass
 
         await player_message_manager.update(interaction.guild)
 
