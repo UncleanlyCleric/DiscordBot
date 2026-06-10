@@ -172,7 +172,32 @@ class MusicCog(commands.Cog):
         )
 
     # =====================================================
-    # TRACK START TEST
+    # DEBUG PLAYER
+    # =====================================================
+    @app_commands.command(name="debugplayer")
+    async def debugplayer(
+        self,
+        interaction: discord.Interaction
+    ):
+
+        player = interaction.guild.voice_client
+
+        if not player:
+            return await interaction.response.send_message(
+                "No player"
+            )
+
+        await interaction.response.send_message(
+            f"""
+playing={player.playing}
+paused={player.paused}
+position={player.position}
+connected={player.connected}
+"""
+        )
+
+    # =====================================================
+    # TRACK START
     # =====================================================
     @commands.Cog.listener()
     async def on_wavelink_track_start(self, payload):
@@ -185,6 +210,27 @@ class MusicCog(commands.Cog):
                 "unknown"
             )
         )
+
+    # =====================================================
+    # TRACK END
+    # =====================================================
+    @commands.Cog.listener()
+    async def on_wavelink_track_end(self, payload):
+
+        logging.warning(
+            "[TRACK_END] reason=%s",
+            getattr(payload, "reason", None)
+        )
+
+        try:
+            await engine.handle_track_end(
+                payload.player
+            )
+
+        except Exception:
+            logging.exception(
+                "[TRACK_END] failed"
+            )
 
 
 async def setup(bot: commands.Bot):
