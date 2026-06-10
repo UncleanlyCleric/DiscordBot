@@ -9,7 +9,7 @@ from services.quotes.service import quote_service
 class QuotesCog(BaseCog):
 
     # -------------------------
-    # ADD QUOTE
+    # SLASH: ADD QUOTE
     # -------------------------
 
     @app_commands.command(name="quote_add", description="Add a quote.")
@@ -35,7 +35,7 @@ class QuotesCog(BaseCog):
         await interaction.response.send_message(embed=embed)
 
     # -------------------------
-    # RANDOM QUOTE
+    # SLASH: RANDOM QUOTE
     # -------------------------
 
     @app_commands.command(name="quote", description="Get a random quote.")
@@ -62,7 +62,7 @@ class QuotesCog(BaseCog):
         await interaction.response.send_message(embed=embed)
 
     # -------------------------
-    # CATEGORIES
+    # SLASH: CATEGORIES
     # -------------------------
 
     @app_commands.command(name="quote_categories", description="List categories.")
@@ -84,7 +84,7 @@ class QuotesCog(BaseCog):
         await interaction.response.send_message(embed=embed)
 
     # -------------------------
-    # DELETE
+    # SLASH: DELETE QUOTE
     # -------------------------
 
     @app_commands.command(name="quote_delete", description="Delete a quote.")
@@ -103,34 +103,30 @@ class QuotesCog(BaseCog):
         await self.send_success(interaction, f"Quote `{quote_id}` deleted.")
 
     # -------------------------
-    # LEGACY PREFIX COMMANDS
+    # PREFIX COMMANDS
     # -------------------------
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
 
-        if message.author.bot:
-            return
-
-        if not message.guild:
+        if message.author.bot or not message.guild:
             return
 
         content = message.content.strip()
 
         # -------------------------
-        # !add<category> <text>
+        # STRICT !add<category> <text>
         # -------------------------
         if content.startswith("!add"):
+
             await self.ensure_guild(message.guild.id)
 
             raw = content[4:].lstrip()  # remove "!add"
 
-            if not raw:
-                return
-
+            # must have category + space + text
             split_index = raw.find(" ")
 
-            if split_index == -1:
+            if split_index <= 0 or split_index == len(raw) - 1:
                 await message.channel.send(
                     "❌ Usage: `!add<category> <text>` (example: `!addmovies hello world`)"
                 )
@@ -139,9 +135,9 @@ class QuotesCog(BaseCog):
             category = raw[:split_index].strip().lower()
             text = raw[split_index + 1:].strip()
 
-            if not text:
+            if not category or not text:
                 await message.channel.send(
-                    "❌ You need to provide quote text."
+                    "❌ Invalid format. Use `!addmovies hello world`"
                 )
                 return
 
