@@ -37,8 +37,8 @@ class MusicState:
     # =====================================================
     # UI TRACKING (NEW - SAFE ADDITION)
     # =====================================================
-    player_message_id: Optional[int] = None
-    player_channel_id: Optional[int] = None
+    message_id: Optional[int] = None
+    channel_id: Optional[int] = None
 
     # =====================================================
     # 🔥 STEP 1: TIMING SYSTEM (for progress bar)
