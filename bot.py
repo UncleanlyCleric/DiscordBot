@@ -11,10 +11,10 @@ from core.logger import setup_logging
 from core.config import config
 from core.database import db
 from core.audit_logger import audit
+
 from database.migrations import migration_runner
 
 from services.music.manager import music_manager
-from services.music.player_engine import engine
 from services.music.ui.music_player_view import MusicPlayerView
 
 sys.path.append(str(Path(__file__).resolve().parent))
@@ -69,13 +69,12 @@ class DiscordBot(commands.Bot):
             nodes=[node]
         )
 
-        # wait for node
         for _ in range(20):
             if wavelink.Pool.nodes:
                 break
             await asyncio.sleep(0.5)
         else:
-            raise RuntimeError("Lavalink failed")
+            raise RuntimeError("Lavalink failed to connect")
 
         logging.info("[LAVALINK] Ready.")
 
@@ -97,7 +96,7 @@ class DiscordBot(commands.Bot):
         self.add_view(MusicPlayerView())
 
         # =====================================================
-        # SYNC
+        # COMMAND SYNC
         # =====================================================
         try:
             synced = await self.tree.sync()
@@ -111,10 +110,9 @@ class DiscordBot(commands.Bot):
         logging.info("[READY] Logged in as %s", self.user)
 
     # =====================================================
-    # IMPORTANT: DO NOTHING HERE (ENGINE HANDLES TRACK FLOW)
+    # 🚨 IMPORTANT: DO NOTHING HERE (ENGINE OWNS FLOW)
     # =====================================================
     async def on_wavelink_track_end(self, payload):
-        # ENGINE controls queue progression
         return
 
     # =====================================================

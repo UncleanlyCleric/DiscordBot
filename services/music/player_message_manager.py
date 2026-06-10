@@ -13,7 +13,7 @@ class PlayerMessageManager:
         state = music_manager.get_player(guild.id)
 
         # =====================================================
-        # SAFETY CHECKS
+        # SAFETY: channel must exist
         # =====================================================
         if not state.player_channel_id:
             logging.warning("[UI] ABORT no channel_id guild=%s", guild.id)
@@ -22,15 +22,15 @@ class PlayerMessageManager:
         channel = guild.get_channel(state.player_channel_id)
 
         if not channel:
-            logging.warning("[UI] ABORT channel missing guild=%s", guild.id)
+            logging.warning("[UI] ABORT missing channel guild=%s", guild.id)
             return
 
         embed = build_now_playing_embed(state)
 
         # =====================================================
-        # CREATE ONCE, EDIT FOREVER
+        # SINGLE MESSAGE RULE
         # =====================================================
-        if not state.message:
+        if state.message is None:
 
             try:
                 msg = await channel.send(
@@ -57,7 +57,7 @@ class PlayerMessageManager:
                 logging.info("[UI] updated message=%s", state.message.id)
 
             except discord.NotFound:
-                # message deleted → recreate ONCE
+                # message deleted → rebuild once
                 state.message = None
                 await self.update(guild)
 
