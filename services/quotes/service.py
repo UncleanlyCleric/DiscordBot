@@ -1,128 +1,27 @@
-import random
-from typing import Optional, Dict, Any, List
-
-from core.database import db
+from services.quotes.repository import QuoteRepository
 
 
 class QuoteService:
     """
-    Pure business logic layer for quotes.
-    No Discord code here.
+    Business logic layer.
+    Currently thin, but allows future expansion
+    (permissions, moderation, analytics, etc.)
     """
 
-    # -------------------------
-    # ADD QUOTE
-    # -------------------------
+    def __init__(self):
+        self.repo = QuoteRepository()
 
-    async def add_quote(
-        self,
-        guild_id: int,
-        category: str,
-        text: str,
-        author_id: Optional[int] = None
-    ) -> int:
-        await db.execute(
-            """
-            INSERT INTO quotes (guild_id, category, quote_text, author_id)
-            VALUES (?, ?, ?, ?)
-            """,
-            (guild_id, category.lower(), text, author_id)
-        )
+    async def add_quote(self, *args, **kwargs):
+        return await self.repo.add_quote(*args, **kwargs)
 
-        row = await db.fetchone(
-            """
-            SELECT last_insert_rowid() AS id
-            """
-        )
+    async def get_random_quote(self, *args, **kwargs):
+        return await self.repo.get_random_quote(*args, **kwargs)
 
-        return row["id"]
+    async def get_categories(self, *args, **kwargs):
+        return await self.repo.get_categories(*args, **kwargs)
 
-    # -------------------------
-    # RANDOM QUOTE
-    # -------------------------
-
-    async def get_random_quote(
-        self,
-        guild_id: int,
-        category: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
-
-        if category:
-            row = await db.fetchone(
-                """
-                SELECT *
-                FROM quotes
-                WHERE guild_id = ?
-                AND category = ?
-                ORDER BY RANDOM()
-                LIMIT 1
-                """,
-                (guild_id, category.lower())
-            )
-        else:
-            row = await db.fetchone(
-                """
-                SELECT *
-                FROM quotes
-                WHERE guild_id = ?
-                ORDER BY RANDOM()
-                LIMIT 1
-                """,
-                (guild_id,)
-            )
-
-        return row
-
-    # -------------------------
-    # CATEGORIES
-    # -------------------------
-
-    async def get_categories(self, guild_id: int) -> List[str]:
-        rows = await db.fetchall(
-            """
-            SELECT DISTINCT category
-            FROM quotes
-            WHERE guild_id = ?
-            ORDER BY category ASC
-            """,
-            (guild_id,)
-        )
-
-        return [r["category"] for r in rows]
-
-    # -------------------------
-    # DELETE QUOTE (NEW)
-    # -------------------------
-
-    async def delete_quote(
-        self,
-        guild_id: int,
-        quote_id: int
-    ) -> bool:
-
-        row = await db.fetchone(
-            """
-            SELECT id
-            FROM quotes
-            WHERE guild_id = ?
-            AND id = ?
-            """,
-            (guild_id, quote_id)
-        )
-
-        if not row:
-            return False
-
-        await db.execute(
-            """
-            DELETE FROM quotes
-            WHERE guild_id = ?
-            AND id = ?
-            """,
-            (guild_id, quote_id)
-        )
-
-        return True
+    async def delete_quote(self, *args, **kwargs):
+        return await self.repo.delete_quote(*args, **kwargs)
 
 
 quote_service = QuoteService()

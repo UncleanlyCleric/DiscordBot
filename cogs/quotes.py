@@ -7,31 +7,14 @@ from services.quotes.service import quote_service
 
 
 class QuotesCog(BaseCog):
-    """
-    Quotes system:
-    - slash commands (primary)
-    - legacy ! commands (minimal support)
-    - per-guild SQL storage
-    """
 
     # -------------------------
-    # SLASH: ADD QUOTE
+    # ADD QUOTE
     # -------------------------
 
-    @app_commands.command(
-        name="quote_add",
-        description="Add a quote to a category."
-    )
-    @app_commands.describe(
-        category="Quote category (e.g. movies, games, etc.)",
-        text="The quote text"
-    )
-    async def quote_add(
-        self,
-        interaction: discord.Interaction,
-        category: str,
-        text: str
-    ):
+    @app_commands.command(name="quote_add", description="Add a quote.")
+    async def quote_add(self, interaction: discord.Interaction, category: str, text: str):
+
         await self.ensure_guild(interaction.guild_id)
 
         quote_id = await quote_service.add_quote(
@@ -43,30 +26,21 @@ class QuotesCog(BaseCog):
 
         embed = discord.Embed(
             title="Quote Added",
-            description=f"Saved to `{category}`",
+            description=f"Saved to `{category.strip().lower()}`",
             color=discord.Color.green()
         )
-        embed.add_field(name="ID", value=str(quote_id), inline=True)
+        embed.add_field(name="ID", value=str(quote_id))
         embed.add_field(name="Text", value=text, inline=False)
 
         await interaction.response.send_message(embed=embed)
 
     # -------------------------
-    # SLASH: RANDOM QUOTE
+    # RANDOM QUOTE
     # -------------------------
 
-    @app_commands.command(
-        name="quote",
-        description="Get a random quote (optionally by category)."
-    )
-    @app_commands.describe(
-        category="Optional category filter"
-    )
-    async def quote(
-        self,
-        interaction: discord.Interaction,
-        category: str | None = None
-    ):
+    @app_commands.command(name="quote", description="Get a random quote.")
+    async def quote(self, interaction: discord.Interaction, category: str | None = None):
+
         await self.ensure_guild(interaction.guild_id)
 
         quote = await quote_service.get_random_quote(
@@ -75,56 +49,31 @@ class QuotesCog(BaseCog):
         )
 
         if not quote:
-            await self.send_error(
-                interaction,
-                "No quotes found."
-            )
-            return
+            return await self.send_error(interaction, "No quotes found.")
 
         embed = discord.Embed(
             title="💬 Quote",
             description=quote["quote_text"],
             color=discord.Color.blurple()
         )
-
-        embed.add_field(
-            name="Category",
-            value=quote["category"],
-            inline=True
-        )
-
-        embed.add_field(
-            name="ID",
-            value=str(quote["id"]),
-            inline=True
-        )
+        embed.add_field(name="Category", value=quote["category"])
+        embed.add_field(name="ID", value=str(quote["id"]))
 
         await interaction.response.send_message(embed=embed)
 
     # -------------------------
-    # SLASH: CATEGORIES
+    # CATEGORIES
     # -------------------------
 
-    @app_commands.command(
-        name="quote_categories",
-        description="List all quote categories."
-    )
-    async def quote_categories(
-        self,
-        interaction: discord.Interaction
-    ):
+    @app_commands.command(name="quote_categories", description="List categories.")
+    async def quote_categories(self, interaction: discord.Interaction):
+
         await self.ensure_guild(interaction.guild_id)
 
-        categories = await quote_service.get_categories(
-            interaction.guild_id
-        )
+        categories = await quote_service.get_categories(interaction.guild_id)
 
         if not categories:
-            await self.send_error(
-                interaction,
-                "No categories found."
-            )
-            return
+            return await self.send_error(interaction, "No categories found.")
 
         embed = discord.Embed(
             title="Quote Categories",
@@ -135,21 +84,12 @@ class QuotesCog(BaseCog):
         await interaction.response.send_message(embed=embed)
 
     # -------------------------
-    # SLASH: DELETE QUOTE
+    # DELETE
     # -------------------------
 
-    @app_commands.command(
-        name="quote_delete",
-        description="Delete a quote by ID."
-    )
-    @app_commands.describe(
-        quote_id="The ID of the quote to delete"
-    )
-    async def quote_delete(
-        self,
-        interaction: discord.Interaction,
-        quote_id: int
-    ):
+    @app_commands.command(name="quote_delete", description="Delete a quote.")
+    async def quote_delete(self, interaction: discord.Interaction, quote_id: int):
+
         await self.ensure_guild(interaction.guild_id)
 
         success = await quote_service.delete_quote(
@@ -158,23 +98,17 @@ class QuotesCog(BaseCog):
         )
 
         if not success:
-            await self.send_error(
-                interaction,
-                "Quote not found."
-            )
-            return
+            return await self.send_error(interaction, "Quote not found.")
 
-        await self.send_success(
-            interaction,
-            f"Quote `{quote_id}` deleted."
-        )
+        await self.send_success(interaction, f"Quote `{quote_id}` deleted.")
 
     # -------------------------
-    # LEGACY COMMANDS (!)
+    # LEGACY PREFIX COMMANDS
     # -------------------------
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
+
         if message.author.bot:
             return
 
@@ -184,18 +118,32 @@ class QuotesCog(BaseCog):
         content = message.content.strip()
 
         # -------------------------
-        # !add <category> <text>
+        # !add<category> <text>
         # -------------------------
+        if content.startswith("!add"):
+            await self.ensure_guild(message.guild.id)
 
-        if content.startswith("!add "):
-            parts = content.split(" ", 2)
+            raw = content[4:].lstrip()  # remove "!add"
 
-            if len(parts) < 3:
+            if not raw:
                 return
 
-            _, category, text = parts
+            split_index = raw.find(" ")
 
-            await self.ensure_guild(message.guild.id)
+            if split_index == -1:
+                await message.channel.send(
+                    "❌ Usage: `!add<category> <text>` (example: `!addmovies hello world`)"
+                )
+                return
+
+            category = raw[:split_index].strip().lower()
+            text = raw[split_index + 1:].strip()
+
+            if not text:
+                await message.channel.send(
+                    "❌ You need to provide quote text."
+                )
+                return
 
             quote_id = await quote_service.add_quote(
                 guild_id=message.guild.id,
@@ -208,26 +156,3 @@ class QuotesCog(BaseCog):
                 f"✅ Quote saved under `{category}` (ID: {quote_id})"
             )
             return
-
-        # -------------------------
-        # !<category>
-        # -------------------------
-
-        if content.startswith("!") and len(content) > 1:
-            category = content[1:].split(" ")[0]
-
-            await self.ensure_guild(message.guild.id)
-
-            quote = await quote_service.get_random_quote(
-                guild_id=message.guild.id,
-                category=category
-            )
-
-            if quote:
-                await message.channel.send(
-                    f"💬 {quote['quote_text']}"
-                )
-
-
-async def setup(bot: commands.Bot):
-    await bot.add_cog(QuotesCog(bot))
