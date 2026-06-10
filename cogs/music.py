@@ -29,21 +29,8 @@ class MusicCog(commands.Cog):
         player = interaction.guild.voice_client
 
         if not player:
-
             player = await voice.channel.connect(
                 cls=wavelink.Player
-            )
-
-            logging.warning(
-                "[PLAYER CREATED] type=%s",
-                type(player)
-            )
-
-        else:
-
-            logging.warning(
-                "[PLAYER REUSED] type=%s",
-                type(player)
             )
 
         return player
@@ -185,36 +172,19 @@ class MusicCog(commands.Cog):
         )
 
     # =====================================================
-    # WAVELINK TRACK END
+    # TRACK START TEST
     # =====================================================
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, payload):
+    async def on_wavelink_track_start(self, payload):
 
         logging.warning(
-            "[COG TRACK END] LISTENER FIRED"
-        )
-
-        logging.warning(
-            "[COG TRACK END] reason=%s",
-            getattr(payload, "reason", None)
-        )
-
-        logging.warning(
-            "[COG TRACK END] player=%s",
-            getattr(payload, "player", None)
-        )
-
-        try:
-
-            await engine.handle_track_end(
-                payload.player
+            "[TRACK_START] %s",
+            getattr(
+                payload.track,
+                "title",
+                "unknown"
             )
-
-        except Exception:
-
-            logging.exception(
-                "[COG TRACK END] failed"
-            )
+        )
 
 
 async def setup(bot: commands.Bot):

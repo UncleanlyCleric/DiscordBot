@@ -36,9 +36,7 @@ class PlayerMessageManager:
                 state.player_message_id = None
 
             except Exception:
-                logging.exception(
-                    "[UI] fetch failed"
-                )
+                logging.exception("[UI] fetch failed")
                 return
 
         # =====================================================
@@ -55,9 +53,7 @@ class PlayerMessageManager:
                 state.player_message_id = msg.id
 
             except Exception:
-                logging.exception(
-                    "[UI] failed create"
-                )
+                logging.exception("[UI] failed create")
                 return
 
         # =====================================================
@@ -78,9 +74,7 @@ class PlayerMessageManager:
                 await self.update(guild)
 
             except Exception:
-                logging.exception(
-                    "[UI] failed update"
-                )
+                logging.exception("[UI] failed update")
 
 
 player_message_manager = PlayerMessageManager()
