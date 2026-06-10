@@ -98,7 +98,7 @@ class DiscordBot(commands.Bot):
                 logging.exception("[COG] Failed %s", cog)
 
         # =====================================================
-        # PERSISTENT UI VIEW (SAFE PLACE)
+        # PERSISTENT UI VIEW
         # =====================================================
         self.add_view(MusicPlayerView())
 
@@ -133,7 +133,7 @@ class DiscordBot(commands.Bot):
             logging.exception("[CMD] Sync failed")
 
         # =====================================================
-        # MUSIC RESTORE (SAFE)
+        # MUSIC RESTORE
         # =====================================================
         logging.info("[MUSIC] Restoring state...")
 
@@ -143,6 +143,7 @@ class DiscordBot(commands.Bot):
             for player in list(music_manager.get_all()):
                 try:
                     tracks = player.queue.all()
+
                     player.queue.clear()
 
                     for t in tracks:
@@ -184,9 +185,16 @@ class DiscordBot(commands.Bot):
         )
 
     # =====================================================
-    # WAVELINK EVENTS 
+    # WAVELINK EVENTS (DISABLED SAFELY)
     # =====================================================
     async def on_wavelink_track_end(self, payload):
+        # Engine already handles queue progression safely
+        return
+
+    async def on_wavelink_track_exception(self, payload):
+        return
+
+    async def on_wavelink_track_stuck(self, payload):
         return
 
     # =====================================================
@@ -219,7 +227,7 @@ class DiscordBot(commands.Bot):
 
 async def main():
     bot = DiscordBot()
-z
+
     token = config.discord_token
     if not token:
         raise RuntimeError("DISCORD_TOKEN missing")
