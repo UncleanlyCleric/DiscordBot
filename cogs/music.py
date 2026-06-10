@@ -147,6 +147,37 @@ class MusicCog(commands.Cog):
 
         await interaction.response.send_message(msg)
 
+    # =====================================================
+    # WAVELINK TRACK END
+    # =====================================================
+    @commands.Cog.listener()
+    async def on_wavelink_track_end(
+        self,
+        payload: wavelink.TrackEndEventPayload
+    ):
+
+        try:
+
+            from services.music.player_engine import engine
+
+            logging.info(
+                "[TRACK_END] reason=%s guild=%s",
+                payload.reason,
+                payload.player.guild.id
+            )
+
+            if str(payload.reason).lower() != "finished":
+                return
+
+            await engine.handle_track_end(
+                payload.player
+            )
+
+        except Exception:
+            logging.exception(
+                "[TRACK_END] failed"
+            )
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(MusicCog(bot))

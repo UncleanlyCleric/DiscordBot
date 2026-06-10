@@ -133,6 +133,46 @@ class DiscordBot(commands.Bot):
         )
 
     # =====================================================
+    # GENERIC WAVELINK EVENT LISTENER
+    # =====================================================
+    async def on_wavelink_event(self, payload):
+
+        try:
+
+            logging.info(
+                "[WAVELINK_EVENT] %s",
+                payload.__class__.__name__
+            )
+
+            from services.music.player_engine import engine
+
+            if isinstance(
+                payload,
+                wavelink.TrackEndEventPayload
+            ):
+
+                logging.info(
+                    "[TRACK_END] reason=%s guild=%s",
+                    payload.reason,
+                    payload.player.guild.id
+                )
+
+                if str(payload.reason).lower() == "finished":
+
+                    logging.info(
+                        "[TRACK_END] advancing queue"
+                    )
+
+                    await engine.handle_track_end(
+                        payload.player
+                    )
+
+        except Exception:
+            logging.exception(
+                "[WAVELINK_EVENT] failed"
+            )
+
+    # =====================================================
     # TRACK END
     # =====================================================
     async def on_wavelink_track_end(
@@ -140,15 +180,13 @@ class DiscordBot(commands.Bot):
         payload: wavelink.TrackEndEventPayload
     ):
         """
-        Only advance queue when a track naturally finishes.
-
-        Skip/stop already advance playback themselves.
+        Backup listener.
         """
 
         try:
 
             logging.info(
-                "[TRACK_END] reason=%s guild=%s",
+                "[TRACK_END_DIRECT] reason=%s guild=%s",
                 payload.reason,
                 payload.player.guild.id
             )
@@ -158,14 +196,14 @@ class DiscordBot(commands.Bot):
             if str(payload.reason).lower() != "finished":
 
                 logging.info(
-                    "[TRACK_END] ignored reason=%s",
+                    "[TRACK_END_DIRECT] ignored reason=%s",
                     payload.reason
                 )
 
                 return
 
             logging.info(
-                "[TRACK_END] advancing queue"
+                "[TRACK_END_DIRECT] advancing queue"
             )
 
             await engine.handle_track_end(
