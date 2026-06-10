@@ -193,6 +193,9 @@ playing={player.playing}
 paused={player.paused}
 position={player.position}
 connected={player.connected}
+type={type(player)}
+module={player.__class__.__module__}
+class={player.__class__.__name__}
 """
         )
 

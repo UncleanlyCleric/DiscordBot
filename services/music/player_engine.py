@@ -275,15 +275,6 @@ class MusicEngine:
 
                     return
 
-                logging.warning(
-                    "[UI_LOOP] title=%s position=%s length=%s playing=%s paused=%s",
-                    state.current.title,
-                    player.position,
-                    state.current_duration,
-                    player.playing,
-                    player.paused
-                )
-
                 await self._update_ui(player)
 
                 await asyncio.sleep(5)
