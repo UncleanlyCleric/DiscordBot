@@ -21,9 +21,6 @@ class Queue:
         self._items.clear()
 
 
-# =====================================================
-# MUSIC STATE (UPDATED - STEP 1 ADDITIONS)
-# =====================================================
 @dataclass
 class MusicState:
     """
@@ -34,27 +31,16 @@ class MusicState:
 
     current: Any = None
 
-    # =====================================================
-    # UI TRACKING (NEW - SAFE ADDITION)
-    # =====================================================
-    message_id: Optional[int] = None
-    channel_id: Optional[int] = None
+    # UI tracking (FIXED)
+    player_message_id: Optional[int] = None
+    player_channel_id: Optional[int] = None
 
-    # =====================================================
-    # 🔥 STEP 1: TIMING SYSTEM (for progress bar)
-    # =====================================================
+    # timing
     current_started_at: Optional[float] = None
-    current_duration: Optional[int] = None  # milliseconds (Lavalink standard)
+    current_duration: Optional[int] = None
 
 
-# =====================================================
-# MUSIC MANAGER
-# =====================================================
 class MusicManager:
-    """
-    Global state registry per guild.
-    """
-
     def __init__(self):
         self._states: dict[int, MusicState] = {}
 
