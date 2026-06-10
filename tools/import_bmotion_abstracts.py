@@ -1,10 +1,13 @@
-import asyncio
-import re
 import sys
 from pathlib import Path
 
-from core.database import db
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
+import asyncio
+import re
+
+from core.database import db
 
 ABSTRACT_PATTERN = re.compile(
     r'bMotion_abstract_register\s+"([^"]+)"\s*\{(.*?)\}',
