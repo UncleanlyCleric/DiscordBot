@@ -147,16 +147,26 @@ class DiscordBot(commands.Bot):
 
         try:
 
-            from services.music.player_engine import engine
-
             logging.info(
-                "[MUSIC] Track ended reason=%s guild=%s",
+                "[TRACK_END] reason=%s guild=%s",
                 payload.reason,
                 payload.player.guild.id
             )
 
-            if payload.reason != "finished":
+            from services.music.player_engine import engine
+
+            if str(payload.reason).lower() != "finished":
+
+                logging.info(
+                    "[TRACK_END] ignored reason=%s",
+                    payload.reason
+                )
+
                 return
+
+            logging.info(
+                "[TRACK_END] advancing queue"
+            )
 
             await engine.handle_track_end(
                 payload.player

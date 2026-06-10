@@ -31,12 +31,10 @@ class PlayerMessageManager:
                     state.player_message_id
                 )
 
-            # ONLY recreate if message is actually gone
             except discord.NotFound:
                 message = None
                 state.player_message_id = None
 
-            # Anything else should NOT create a duplicate
             except Exception:
                 logging.exception(
                     "[UI] fetch failed"
