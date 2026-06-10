@@ -7,6 +7,21 @@ from services.music.smart_rank import pick_best
 APPLE_MUSIC = r"music\.apple\.com"
 SPOTIFY = r"open\.spotify\.com"
 
+BAD_RESULTS = [
+    "karaoke",
+    "instrumental",
+    "nightcore",
+    "8d audio",
+    "bass boosted",
+    "sped up",
+    "slowed",
+    "reverb",
+    "cover",
+    "tribute",
+    "reaction",
+    "lyrics",
+]
+
 
 class MusicResolver:
 
@@ -21,10 +36,23 @@ class MusicResolver:
         if not query:
             return []
 
+        is_url = (
+            query.startswith("http")
+            or re.search(APPLE_MUSIC, query)
+            or re.search(SPOTIFY, query)
+        )
+
         try:
-            results = await wavelink.Playable.search(
-                query
-            )
+
+            # URLs should be resolved normally
+            if is_url:
+                results = await wavelink.Playable.search(query)
+
+            # Text searches should favor YouTube Music
+            else:
+                results = await wavelink.Playable.search(
+                    f"ytsearch:{query}"
+                )
 
         except Exception:
             return []
@@ -36,18 +64,11 @@ class MusicResolver:
         # PLAYLISTS
         # =====================================================
 
-        playlist = getattr(
-            results,
-            "playlist",
-            None
-        )
+        playlist = getattr(results, "playlist", None)
 
         if (
             playlist
-            or isinstance(
-                results,
-                wavelink.Playlist
-            )
+            or isinstance(results, wavelink.Playlist)
         ):
 
             tracks = getattr(
@@ -59,11 +80,7 @@ class MusicResolver:
             return [
                 Track(
                     title=t.title,
-                    author=getattr(
-                        t,
-                        "author",
-                        None
-                    ),
+                    author=getattr(t, "author", None),
                     uri=t.uri,
                     requester_id=requester_id,
                     playable=t,
@@ -75,28 +92,12 @@ class MusicResolver:
         # URLS
         # =====================================================
 
-        is_url = (
-            query.startswith("http")
-            or re.search(
-                APPLE_MUSIC,
-                query
-            )
-            or re.search(
-                SPOTIFY,
-                query
-            )
-        )
-
         if is_url:
 
             return [
                 Track(
                     title=t.title,
-                    author=getattr(
-                        t,
-                        "author",
-                        None
-                    ),
+                    author=getattr(t, "author", None),
                     uri=t.uri,
                     requester_id=requester_id,
                     playable=t,
@@ -105,7 +106,32 @@ class MusicResolver:
             ]
 
         # =====================================================
-        # TEXT SEARCH
+        # FILTER GARBAGE RESULTS
+        # =====================================================
+
+        filtered = []
+
+        for track in results:
+
+            title = getattr(
+                track,
+                "title",
+                ""
+            ).lower()
+
+            if any(
+                bad in title
+                for bad in BAD_RESULTS
+            ):
+                continue
+
+            filtered.append(track)
+
+        if filtered:
+            results = filtered
+
+        # =====================================================
+        # SMART PICK
         # =====================================================
 
         best = pick_best(
@@ -119,11 +145,7 @@ class MusicResolver:
         return [
             Track(
                 title=best.title,
-                author=getattr(
-                    best,
-                    "author",
-                    None
-                ),
+                author=getattr(best, "author", None),
                 uri=best.uri,
                 requester_id=requester_id,
                 playable=best,
