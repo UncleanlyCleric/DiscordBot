@@ -177,33 +177,26 @@ class DiscordBot(commands.Bot):
     # =====================================================
     async def on_wavelink_track_end(
         self,
-        payload: wavelink.TrackEndEventPayload
+        payload
     ):
-        """
-        Backup listener.
-        """
+
+        logging.warning(
+            "[TRACK_END_EVENT] FIRED payload=%s",
+            payload
+        )
 
         try:
 
-            logging.info(
-                "[TRACK_END_DIRECT] reason=%s guild=%s",
-                payload.reason,
-                payload.player.guild.id
-            )
-
             from services.music.player_engine import engine
 
-            if str(payload.reason).lower() != "finished":
+            logging.warning(
+                "[TRACK_END_EVENT] reason=%s",
+                getattr(payload, "reason", None)
+            )
 
-                logging.info(
-                    "[TRACK_END_DIRECT] ignored reason=%s",
-                    payload.reason
-                )
-
-                return
-
-            logging.info(
-                "[TRACK_END_DIRECT] advancing queue"
+            logging.warning(
+                "[TRACK_END_EVENT] player=%s",
+                getattr(payload, "player", None)
             )
 
             await engine.handle_track_end(
@@ -212,9 +205,8 @@ class DiscordBot(commands.Bot):
 
         except Exception:
             logging.exception(
-                "[MUSIC] track_end failed"
+                "[TRACK_END_EVENT] FAILED"
             )
-
     # =====================================================
     # NODE READY
     # =====================================================
