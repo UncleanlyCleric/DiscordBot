@@ -7,6 +7,7 @@ import wavelink
 from services.music.resolver import music_resolver
 from services.music.manager import music_manager
 from services.music.player_engine import engine
+
 from services.music.player_message_manager import player_message_manager
 
 
@@ -26,7 +27,7 @@ class MusicCog(commands.Cog):
         if not voice or not voice.channel:
             return None
 
-        player: wavelink.Player = interaction.guild.voice_client
+        player = interaction.guild.voice_client
 
         if not player:
             player = await voice.channel.connect(cls=wavelink.Player)
@@ -49,13 +50,11 @@ class MusicCog(commands.Cog):
         if not tracks:
             return await interaction.followup.send("No results.")
 
-        # FIX: enqueue ALL via engine
-        await engine.enqueue_many(player, tracks)
+        for t in tracks:
+            await engine.enqueue(player, t)
 
-        # START PLAYBACK
         await engine.start(player)
 
-        # UI bootstrap
         state = music_manager.get_player(interaction.guild_id)
         state.player_channel_id = interaction.channel.id
 
@@ -74,13 +73,6 @@ class MusicCog(commands.Cog):
         if player:
             await engine.stop(player)
 
-            try:
-                await player.disconnect()
-            except Exception:
-                pass
-
-        await player_message_manager.update(interaction.guild)
-
         await interaction.response.send_message("🛑 Stopped", ephemeral=True)
 
     # =====================================================
@@ -91,8 +83,6 @@ class MusicCog(commands.Cog):
 
         if player:
             await engine.skip(player)
-
-        await player_message_manager.update(interaction.guild)
 
         await interaction.response.send_message("⏭ Skipped", ephemeral=True)
 
@@ -108,8 +98,6 @@ class MusicCog(commands.Cog):
             except Exception:
                 pass
 
-        await player_message_manager.update(interaction.guild)
-
         await interaction.response.send_message("⏸ Paused", ephemeral=True)
 
     # =====================================================
@@ -123,8 +111,6 @@ class MusicCog(commands.Cog):
                 await player.pause(False)
             except Exception:
                 pass
-
-        await player_message_manager.update(interaction.guild)
 
         await interaction.response.send_message("▶ Resumed", ephemeral=True)
 

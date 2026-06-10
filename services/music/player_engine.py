@@ -1,6 +1,6 @@
 import time
-import logging
 import asyncio
+import logging
 
 import wavelink
 
@@ -10,10 +10,10 @@ from services.music.manager import music_manager
 class MusicEngine:
 
     def __init__(self):
-        self._lock = asyncio.Lock()
+        self._ui_tasks = {}
 
     # =====================================================
-    # ENQUEUE SINGLE
+    # ENQUEUE
     # =====================================================
     async def enqueue(self, player: wavelink.Player, track):
 
@@ -25,30 +25,15 @@ class MusicEngine:
             "[MUSIC] enqueue() guild=%s track=%s queue_size=%s",
             player.guild.id,
             getattr(track, "title", "Unknown"),
-            len(state.queue.all()) if hasattr(state.queue, "all") else 0
+            len(state.queue.all())
         )
 
     # =====================================================
-    # ENQUEUE MANY (FIX FOR PLAYLISTS)
-    # =====================================================
-    async def enqueue_many(self, player: wavelink.Player, tracks):
-
-        for t in tracks:
-            await self.enqueue(player, t)
-
-    # =====================================================
-    # START PLAYBACK IF IDLE
+    # START
     # =====================================================
     async def start(self, player: wavelink.Player):
 
         state = music_manager.get_player(player.guild.id)
-
-        logging.info(
-            "[MUSIC] start() guild=%s current=%s queue=%s",
-            player.guild.id,
-            getattr(state.current, "title", None),
-            len(state.queue.all()) if hasattr(state.queue, "all") else 0
-        )
 
         if state.current:
             logging.info("[MUSIC] start() ignored, already playing")
@@ -57,117 +42,96 @@ class MusicEngine:
         await self._play_next(player)
 
     # =====================================================
-    # PLAY NEXT TRACK (LOCKED FIX)
+    # PLAY NEXT
     # =====================================================
     async def _play_next(self, player: wavelink.Player):
 
-        async with self._lock:
+        state = music_manager.get_player(player.guild.id)
 
-            state = music_manager.get_player(player.guild.id)
+        next_track = state.queue.next()
 
-            next_track = state.queue.next()
+        logging.info(
+            "[MUSIC] handle_track_end() guild=%s",
+            player.guild.id
+        )
 
-            logging.info(
-                "[MUSIC] Queue size before next=%s",
-                len(state.queue.all()) if hasattr(state.queue, "all") else 0
-            )
+        logging.info(
+            "[MUSIC] Queue size before next=%s",
+            len(state.queue.all())
+        )
 
-            if not next_track:
+        if not next_track:
 
-                logging.info("[MUSIC] Queue empty guild=%s", player.guild.id)
+            logging.info("[MUSIC] Queue empty guild=%s", player.guild.id)
 
-                state.current = None
-                state.current_started_at = None
-                state.current_duration = None
+            state.current = None
+            state.current_started_at = None
+            state.current_duration = None
 
-                from services.music.player_message_manager import player_message_manager
-                await player_message_manager.update(player.guild)
+            await self._update_ui(player)
+            return
 
-                return
+        state.current = next_track
+        state.current_started_at = time.time()
 
-            state.current = next_track
-            state.current_started_at = time.time()
+        duration = getattr(getattr(next_track, "playable", None), "length", None)
+        state.current_duration = duration
 
-            duration = getattr(getattr(next_track, "playable", None), "length", None)
-            state.current_duration = duration
+        logging.info(
+            "[MUSIC] Next track=%s",
+            next_track.title
+        )
 
-            logging.info(
-                "[MUSIC] Attempting playback title=%s duration=%s",
-                next_track.title,
-                duration
-            )
+        logging.info(
+            "[MUSIC] Attempting playback title=%s duration=%s",
+            next_track.title,
+            duration
+        )
 
-            try:
-                await player.play(next_track.playable)
+        try:
+            await player.play(next_track.playable)
 
-                logging.info(
-                    "[MUSIC] Playing '%s' guild=%s",
-                    next_track.title,
-                    player.guild.id
-                )
+        except Exception:
+            logging.exception("[MUSIC] Failed playing %s", next_track.title)
 
-            except Exception:
-                logging.exception("[MUSIC] Failed playback %s", next_track.title)
-                state.current = None
-                await self._play_next(player)
-                return
+            state.current = None
+            await self._play_next(player)
+            return
 
-            from services.music.player_message_manager import player_message_manager
-            await player_message_manager.update(player.guild)
+        await self._update_ui(player)
 
-            # =====================================================
-            # UI LOOP (FIX FOR PROGRESS BAR NOT MOVING)
-            # =====================================================
-            asyncio.create_task(self._ui_tick(player))
+        self._start_ui_loop(player)
 
     # =====================================================
-    # UI TICK LOOP (FIX)
-    # =====================================================
-    async def _ui_tick(self, player: wavelink.Player):
-
-        while True:
-            await asyncio.sleep(5)
-
-            state = music_manager.get_player(player.guild.id)
-
-            if not state.current:
-                return
-
-            try:
-                from services.music.player_message_manager import player_message_manager
-                await player_message_manager.update(player.guild)
-            except Exception:
-                pass
-
-    # =====================================================
-    # SKIP (FIXED SAFE)
+    # SKIP
     # =====================================================
     async def skip(self, player: wavelink.Player):
 
-        logging.info("[MUSIC] skip() guild=%s", player.guild.id)
-
         state = music_manager.get_player(player.guild.id)
+
+        logging.info("[MUSIC] skip() guild=%s", player.guild.id)
 
         state.current = None
         state.current_started_at = None
         state.current_duration = None
 
         try:
-            await player.skip(force=True)
+            await player.stop()
         except Exception:
-            try:
-                await player.stop()
-            except Exception:
-                pass
+            pass
+
+        await self._play_next(player)
+
+        await self._update_ui(player)
 
     # =====================================================
     # STOP
     # =====================================================
     async def stop(self, player: wavelink.Player):
 
-        logging.info("[MUSIC] stop() guild=%s", player.guild.id)
-
         state = music_manager.get_player(player.guild.id)
+
+        logging.info("[MUSIC] stop() guild=%s", player.guild.id)
 
         state.queue.clear()
 
@@ -181,19 +145,52 @@ class MusicEngine:
             pass
 
         try:
+            await player.disconnect()
+        except Exception:
+            pass
+
+        await self._update_ui(player)
+
+    # =====================================================
+    # UI UPDATE (ONLY ENGINE OWNS THIS NOW)
+    # =====================================================
+    async def _update_ui(self, player):
+
+        try:
             from services.music.player_message_manager import player_message_manager
             await player_message_manager.update(player.guild)
+
         except Exception:
-            logging.exception("[MUSIC] UI update failed after stop")
+            logging.exception("[MUSIC] UI update failed")
 
     # =====================================================
-    # TRACK END HANDLER (FIX MISSING METHOD)
+    # UI LOOP (PROGRESS BAR FIX)
     # =====================================================
-    async def handle_track_end(self, player: wavelink.Player):
+    def _start_ui_loop(self, player):
 
-        logging.info("[MUSIC] handle_track_end() guild=%s", player.guild.id)
+        guild_id = player.guild.id
 
-        await self._play_next(player)
+        if guild_id in self._ui_tasks:
+            self._ui_tasks[guild_id].cancel()
+
+        self._ui_tasks[guild_id] = asyncio.create_task(self._ui_tick(player))
+
+    async def _ui_tick(self, player):
+
+        try:
+            while True:
+
+                state = music_manager.get_player(player.guild.id)
+
+                if not state.current:
+                    return
+
+                await self._update_ui(player)
+
+                await asyncio.sleep(5)
+
+        except asyncio.CancelledError:
+            return
 
 
 engine = MusicEngine()
