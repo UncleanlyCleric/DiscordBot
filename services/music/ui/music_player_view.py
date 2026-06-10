@@ -22,7 +22,19 @@ class MusicPlayerView(discord.ui.View):
         custom_id="music_pause_resume"
     )
     async def pause_resume(self, interaction, button):
-        pass
+
+        player = interaction.guild.voice_client
+
+        if player:
+            try:
+                await player.pause(not player.paused)
+            except Exception:
+                pass
+
+        await interaction.response.edit_message(
+            embed=self._refresh_embed(interaction.guild.id),
+            view=self
+        )
 
     @discord.ui.button(
         emoji="⏭",
@@ -30,7 +42,17 @@ class MusicPlayerView(discord.ui.View):
         custom_id="music_skip"
     )
     async def skip(self, interaction, button):
-        pass
+
+        player = interaction.guild.voice_client
+
+        if player:
+            from services.music.player_engine import engine
+            await engine.skip(player)
+
+        await interaction.response.edit_message(
+            embed=self._refresh_embed(interaction.guild.id),
+            view=self
+        )
 
     @discord.ui.button(
         emoji="⏹",
@@ -38,4 +60,14 @@ class MusicPlayerView(discord.ui.View):
         custom_id="music_stop"
     )
     async def stop(self, interaction, button):
-        pass
+
+        player = interaction.guild.voice_client
+
+        if player:
+            from services.music.player_engine import engine
+            await engine.stop(player)
+
+        await interaction.response.edit_message(
+            embed=self._refresh_embed(interaction.guild.id),
+            view=self
+        )
