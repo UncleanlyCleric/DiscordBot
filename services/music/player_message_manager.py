@@ -25,14 +25,26 @@ class PlayerMessageManager:
         message = None
 
         if state.player_message_id:
+
             try:
-                message = await channel.fetch_message(state.player_message_id)
-            except Exception:
+                message = await channel.fetch_message(
+                    state.player_message_id
+                )
+
+            # ONLY recreate if message is actually gone
+            except discord.NotFound:
                 message = None
                 state.player_message_id = None
 
+            # Anything else should NOT create a duplicate
+            except Exception:
+                logging.exception(
+                    "[UI] fetch failed"
+                )
+                return
+
         # =====================================================
-        # CREATE MESSAGE (single source of truth)
+        # CREATE MESSAGE
         # =====================================================
         if message is None:
 
@@ -44,10 +56,15 @@ class PlayerMessageManager:
 
                 state.player_message_id = msg.id
 
-                logging.info("[UI] created message=%s", msg.id)
+                logging.info(
+                    "[UI] created message=%s",
+                    msg.id
+                )
 
             except Exception:
-                logging.exception("[UI] failed create")
+                logging.exception(
+                    "[UI] failed create"
+                )
                 return
 
         # =====================================================
@@ -61,14 +78,21 @@ class PlayerMessageManager:
                     view=MusicPlayerView()
                 )
 
-                logging.info("[UI] updated message=%s", message.id)
+                logging.info(
+                    "[UI] updated message=%s",
+                    message.id
+                )
 
             except discord.NotFound:
+
                 state.player_message_id = None
+
                 await self.update(guild)
 
             except Exception:
-                logging.exception("[UI] failed update")
+                logging.exception(
+                    "[UI] failed update"
+                )
 
 
 player_message_manager = PlayerMessageManager()
