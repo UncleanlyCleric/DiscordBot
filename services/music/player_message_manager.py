@@ -13,68 +13,119 @@ class PlayerMessageManager:
         state = music_manager.get_player(guild.id)
 
         if not state.player_channel_id:
+            logging.warning(
+                "[UI] no player_channel_id guild=%s",
+                guild.id
+            )
             return
 
-        channel = guild.get_channel(state.player_channel_id)
+        channel = guild.get_channel(
+            state.player_channel_id
+        )
 
         if not channel:
+            logging.warning(
+                "[UI] channel missing guild=%s channel=%s",
+                guild.id,
+                state.player_channel_id
+            )
             return
 
         embed = build_now_playing_embed(state)
+
+        view = MusicPlayerView()
+
+        logging.warning(
+            "[UI] buttons=%s guild=%s",
+            len(view.children),
+            guild.id
+        )
 
         message = None
 
         if state.player_message_id:
 
             try:
+
                 message = await channel.fetch_message(
                     state.player_message_id
                 )
 
             except discord.NotFound:
+
+                logging.warning(
+                    "[UI] message missing recreating"
+                )
+
                 message = None
                 state.player_message_id = None
 
             except Exception:
-                logging.exception("[UI] fetch failed")
+
+                logging.exception(
+                    "[UI] fetch failed"
+                )
                 return
 
         # =====================================================
-        # CREATE MESSAGE
+        # CREATE
         # =====================================================
         if message is None:
 
             try:
+
                 msg = await channel.send(
                     embed=embed,
-                    view=MusicPlayerView()
+                    view=view
                 )
 
                 state.player_message_id = msg.id
 
-            except Exception:
-                logging.exception("[UI] failed create")
-                return
-
-        # =====================================================
-        # UPDATE MESSAGE
-        # =====================================================
-        else:
-
-            try:
-                await message.edit(
-                    embed=embed,
-                    view=MusicPlayerView()
+                logging.info(
+                    "[UI] created message=%s buttons=%s",
+                    msg.id,
+                    len(view.children)
                 )
 
-            except discord.NotFound:
-
-                state.player_message_id = None
-
-                await self.update(guild)
-
             except Exception:
-                logging.exception("[UI] failed update")
+
+                logging.exception(
+                    "[UI] failed create"
+                )
+
+            return
+
+        # =====================================================
+        # UPDATE
+        # =====================================================
+        try:
+
+            await message.edit(
+                embed=embed,
+                view=view
+            )
+
+            logging.info(
+                "[UI] updated message=%s buttons=%s",
+                message.id,
+                len(view.children)
+            )
+
+        except discord.NotFound:
+
+            logging.warning(
+                "[UI] update target missing recreating"
+            )
+
+            state.player_message_id = None
+
+            await self.update(guild)
+
+        except Exception:
+
+            logging.exception(
+                "[UI] failed update"
+            )
 
 
 player_message_manager = PlayerMessageManager()

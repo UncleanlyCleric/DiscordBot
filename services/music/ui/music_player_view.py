@@ -1,131 +1,41 @@
-import logging
 import discord
 
 from services.music.manager import music_manager
-from services.music.ui.music_player_view import MusicPlayerView
 from services.music.now_playing import build_now_playing_embed
 
 
-class PlayerMessageManager:
+class MusicPlayerView(discord.ui.View):
 
-    async def update(self, guild: discord.Guild):
+    def __init__(self):
+        super().__init__(timeout=None)
 
-        state = music_manager.get_player(guild.id)
+    def _state(self, guild_id: int):
+        return music_manager.get_player(guild_id)
 
-        if not state.player_channel_id:
-            logging.warning(
-                "[UI] no player_channel_id guild=%s",
-                guild.id
-            )
-            return
+    def _refresh_embed(self, guild_id: int):
+        state = self._state(guild_id)
+        return build_now_playing_embed(state)
 
-        channel = guild.get_channel(
-            state.player_channel_id
-        )
+    @discord.ui.button(
+        emoji="⏯",
+        style=discord.ButtonStyle.secondary,
+        custom_id="music_pause_resume"
+    )
+    async def pause_resume(self, interaction, button):
+        pass
 
-        if not channel:
-            logging.warning(
-                "[UI] channel missing guild=%s channel=%s",
-                guild.id,
-                state.player_channel_id
-            )
-            return
+    @discord.ui.button(
+        emoji="⏭",
+        style=discord.ButtonStyle.primary,
+        custom_id="music_skip"
+    )
+    async def skip(self, interaction, button):
+        pass
 
-        embed = build_now_playing_embed(state)
-
-        view = MusicPlayerView()
-
-        logging.warning(
-            "[UI] buttons=%s guild=%s",
-            len(view.children),
-            guild.id
-        )
-
-        message = None
-
-        if state.player_message_id:
-
-            try:
-
-                message = await channel.fetch_message(
-                    state.player_message_id
-                )
-
-            except discord.NotFound:
-
-                logging.warning(
-                    "[UI] message missing recreating"
-                )
-
-                message = None
-                state.player_message_id = None
-
-            except Exception:
-
-                logging.exception(
-                    "[UI] fetch failed"
-                )
-                return
-
-        # =====================================================
-        # CREATE
-        # =====================================================
-        if message is None:
-
-            try:
-
-                msg = await channel.send(
-                    embed=embed,
-                    view=view
-                )
-
-                state.player_message_id = msg.id
-
-                logging.info(
-                    "[UI] created message=%s buttons=%s",
-                    msg.id,
-                    len(view.children)
-                )
-
-            except Exception:
-
-                logging.exception(
-                    "[UI] failed create"
-                )
-
-            return
-
-        # =====================================================
-        # UPDATE
-        # =====================================================
-        try:
-
-            await message.edit(
-                embed=embed,
-                view=view
-            )
-
-            logging.info(
-                "[UI] updated message=%s buttons=%s",
-                message.id,
-                len(view.children)
-            )
-
-        except discord.NotFound:
-
-            logging.warning(
-                "[UI] update target missing recreating"
-            )
-
-            state.player_message_id = None
-
-            await self.update(guild)
-
-        except Exception:
-
-            logging.exception(
-                "[UI] failed update"
-            )
-
-
-player_message_manager = PlayerMessageManager()
+    @discord.ui.button(
+        emoji="⏹",
+        style=discord.ButtonStyle.danger,
+        custom_id="music_stop"
+    )
+    async def stop(self, interaction, button):
+        pass
