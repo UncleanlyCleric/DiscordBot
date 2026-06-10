@@ -1,4 +1,5 @@
 from typing import Optional, Dict, Any, List
+
 from core.database import db
 
 
@@ -19,15 +20,32 @@ class QuoteRepository:
         text: str,
         author_id: Optional[int] = None
     ) -> int:
-        result = await db.execute(
+
+        await db.execute(
             """
-            INSERT INTO quotes (guild_id, category, quote_text, author_id)
+            INSERT INTO quotes (
+                guild_id,
+                category,
+                quote_text,
+                author_id
+            )
             VALUES (?, ?, ?, ?)
             """,
-            (guild_id, category.strip().lower(), text, author_id)
+            (
+                guild_id,
+                category.strip().lower(),
+                text,
+                author_id
+            )
         )
 
-        return result.lastrowid
+        row = await db.fetchone(
+            """
+            SELECT last_insert_rowid() AS id
+            """
+        )
+
+        return row["id"]
 
     # -------------------------
     # READ RANDOM
@@ -49,7 +67,10 @@ class QuoteRepository:
                 ORDER BY RANDOM()
                 LIMIT 1
                 """,
-                (guild_id, category.strip().lower())
+                (
+                    guild_id,
+                    category.strip().lower()
+                )
             )
 
         return await db.fetchone(
@@ -67,7 +88,11 @@ class QuoteRepository:
     # CATEGORIES
     # -------------------------
 
-    async def get_categories(self, guild_id: int) -> List[str]:
+    async def get_categories(
+        self,
+        guild_id: int
+    ) -> List[str]:
+
         rows = await db.fetchall(
             """
             SELECT DISTINCT category
@@ -77,13 +102,19 @@ class QuoteRepository:
             """,
             (guild_id,)
         )
+
         return [r["category"] for r in rows]
 
     # -------------------------
     # DELETE
     # -------------------------
 
-    async def delete_quote(self, guild_id: int, quote_id: int) -> bool:
+    async def delete_quote(
+        self,
+        guild_id: int,
+        quote_id: int
+    ) -> bool:
+
         row = await db.fetchone(
             """
             SELECT id
@@ -91,7 +122,10 @@ class QuoteRepository:
             WHERE guild_id = ?
               AND id = ?
             """,
-            (guild_id, quote_id)
+            (
+                guild_id,
+                quote_id
+            )
         )
 
         if not row:
@@ -103,7 +137,10 @@ class QuoteRepository:
             WHERE guild_id = ?
               AND id = ?
             """,
-            (guild_id, quote_id)
+            (
+                guild_id,
+                quote_id
+            )
         )
 
         return True
