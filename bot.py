@@ -14,7 +14,6 @@ from core.audit_logger import audit
 
 from database.migrations import migration_runner
 
-from services.music.manager import music_manager
 from services.music.ui.music_player_view import MusicPlayerView
 
 sys.path.append(str(Path(__file__).resolve().parent))
@@ -43,6 +42,8 @@ class DiscordBot(commands.Bot):
 
         self.dev_guild_id = getattr(config, "dev_guild_id", None)
 
+    # =====================================================
+    # SETUP
     # =====================================================
     async def setup_hook(self):
 
@@ -84,14 +85,25 @@ class DiscordBot(commands.Bot):
         for cog in COGS:
             try:
                 await self.load_extension(cog)
+
                 audit.cog_loaded(cog)
-                logging.info("[COG] Loaded %s", cog)
+
+                logging.info(
+                    "[COG] Loaded %s",
+                    cog
+                )
+
             except Exception as e:
+
                 audit.cog_failed(cog, e)
-                logging.exception("[COG] Failed %s", cog)
+
+                logging.exception(
+                    "[COG] Failed %s",
+                    cog
+                )
 
         # =====================================================
-        # UI VIEW
+        # PERSISTENT UI
         # =====================================================
         self.add_view(MusicPlayerView())
 
@@ -99,30 +111,82 @@ class DiscordBot(commands.Bot):
         # COMMAND SYNC
         # =====================================================
         try:
+
             synced = await self.tree.sync()
-            logging.info("[CMD] Synced %s commands", len(synced))
+
+            logging.info(
+                "[CMD] Synced %s commands",
+                len(synced)
+            )
 
         except Exception:
             logging.exception("[CMD] Sync failed")
 
     # =====================================================
+    # READY
+    # =====================================================
     async def on_ready(self):
-        logging.info("[READY] Logged in as %s", self.user)
+
+        logging.info(
+            "[READY] Logged in as %s",
+            self.user
+        )
 
     # =====================================================
-    # 🚨 IMPORTANT: DO NOTHING HERE (ENGINE OWNS FLOW)
+    # TRACK END
     # =====================================================
-    @bot.event
-    async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
-        await engine.handle_track_end(payload.player)
+    async def on_wavelink_track_end(
+        self,
+        payload: wavelink.TrackEndEventPayload
+    ):
+        """
+        Only advance queue when a track naturally finishes.
+
+        Skip/stop already advance playback themselves.
+        """
+
+        try:
+
+            from services.music.player_engine import engine
+
+            logging.info(
+                "[MUSIC] Track ended reason=%s guild=%s",
+                payload.reason,
+                payload.player.guild.id
+            )
+
+            if payload.reason != "finished":
+                return
+
+            await engine.handle_track_end(
+                payload.player
+            )
+
+        except Exception:
+            logging.exception(
+                "[MUSIC] track_end failed"
+            )
 
     # =====================================================
-    async def on_wavelink_node_ready(self, payload):
-        logging.info("[LAVALINK] Node ready: %s", payload.node.identifier)
+    # NODE READY
+    # =====================================================
+    async def on_wavelink_node_ready(
+        self,
+        payload
+    ):
+        logging.info(
+            "[LAVALINK] Node ready: %s",
+            payload.node.identifier
+        )
 
+    # =====================================================
+    # SHUTDOWN
     # =====================================================
     async def close(self):
-        logging.info("[SHUTDOWN] Cleaning up...")
+
+        logging.info(
+            "[SHUTDOWN] Cleaning up..."
+        )
 
         try:
             await wavelink.Pool.disconnect()
@@ -138,11 +202,15 @@ class DiscordBot(commands.Bot):
 
 
 async def main():
+
     bot = DiscordBot()
 
     token = config.discord_token
+
     if not token:
-        raise RuntimeError("Missing DISCORD_TOKEN")
+        raise RuntimeError(
+            "Missing DISCORD_TOKEN"
+        )
 
     await bot.start(token)
 
