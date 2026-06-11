@@ -14,6 +14,7 @@ class MusicEngine:
 
     def __init__(self):
         self._ui_tasks = {}
+        self._ui_running = set()
         self._manual_skip = set()
 
     # =====================================================
@@ -47,12 +48,9 @@ class MusicEngine:
                 "[MUSIC] start() ignored current=%s",
                 state.current.title
             )
-
             return
 
-        logging.info(
-            "[MUSIC] start() beginning playback"
-        )
+        logging.info("[MUSIC] start() beginning playback")
 
         await self._play_next(player)
 
@@ -62,9 +60,7 @@ class MusicEngine:
 
     async def _play_next(self, player: wavelink.Player):
 
-        state = music_manager.get_player(
-            player.guild.id
-        )
+        state = music_manager.get_player(player.guild.id)
 
         next_track = state.queue.next()
 
@@ -75,7 +71,6 @@ class MusicEngine:
             state.current_duration = None
 
             await self._update_ui(player)
-
             return
 
         state.current = next_track
@@ -90,8 +85,6 @@ class MusicEngine:
             state.history = []
 
         state.history.append(next_track)
-
-        # keep latest 50
         state.history = state.history[-50:]
 
         state.current_started_at = time.time()
@@ -111,31 +104,25 @@ class MusicEngine:
         )
 
         try:
+            await player.play(next_track.playable)
 
-            await player.play(
-                next_track.playable
-            )
-
-            logging.info(
-                "[PLAY_NEXT] player.play() success"
-            )
+            logging.info("[PLAY_NEXT] player.play() success")
 
         except Exception:
-
             logging.exception(
                 "[PLAY_NEXT] failed playing %s",
                 next_track.title
             )
 
             state.current = None
-
             await self._play_next(player)
-
             return
 
         await self._update_ui(player)
 
-        self._start_ui_loop(player)
+        # UI loop guard (prevents restart spam)
+        if player.guild.id not in self._ui_running:
+            self._start_ui_loop(player)
 
     # =====================================================
     # TRACK END
@@ -146,14 +133,10 @@ class MusicEngine:
         guild_id = player.guild.id
 
         if guild_id in self._manual_skip:
-
             self._manual_skip.remove(guild_id)
-
             return
 
-        state = music_manager.get_player(
-            guild_id
-        )
+        state = music_manager.get_player(guild_id)
 
         finished_track = state.current
 
@@ -161,45 +144,27 @@ class MusicEngine:
         # TRACK LOOP
         # ==========================================
 
-        if (
-            state.loop_track
-            and finished_track
-        ):
+        if state.loop_track and finished_track:
 
             state.current = None
             state.current_started_at = None
             state.current_duration = None
 
             try:
-
-                state.queue._queue.appendleft(
-                    finished_track
-                )
-
+                state.queue._queue.appendleft(finished_track)
             except Exception:
-
-                state.queue.add(
-                    finished_track
-                )
+                state.queue.add(finished_track)
 
             await asyncio.sleep(0.25)
-
             await self._play_next(player)
-
             return
 
         # ==========================================
         # QUEUE LOOP
         # ==========================================
 
-        if (
-            state.loop_queue
-            and finished_track
-        ):
-
-            state.queue.add(
-                finished_track
-            )
+        if state.loop_queue and finished_track:
+            state.queue.add(finished_track)
 
         # ==========================================
         # NORMAL FLOW
@@ -210,7 +175,6 @@ class MusicEngine:
         state.current_duration = None
 
         await asyncio.sleep(0.25)
-
         await self._play_next(player)
 
     # =====================================================
@@ -221,34 +185,24 @@ class MusicEngine:
 
         guild_id = player.guild.id
 
-        logging.info(
-            "[SKIP] guild=%s",
-            guild_id
-        )
+        logging.info("[SKIP] guild=%s", guild_id)
 
-        self._manual_skip.add(
-            guild_id
-        )
+        self._manual_skip.add(guild_id)
 
-        state = music_manager.get_player(
-            guild_id
-        )
+        state = music_manager.get_player(guild_id)
 
         state.current = None
         state.current_started_at = None
         state.current_duration = None
 
         try:
-
             await player.stop()
-
         except Exception:
+            logging.exception("[SKIP] stop failed")
 
-            logging.exception(
-                "[SKIP] stop failed"
-            )
+        # IMPORTANT:
+        # DO NOT call _play_next here
 
-        await self._play_next(player)
 
     # =====================================================
     # STOP
@@ -258,14 +212,9 @@ class MusicEngine:
 
         guild_id = player.guild.id
 
-        logging.info(
-            "[STOP] guild=%s",
-            guild_id
-        )
+        logging.info("[STOP] guild=%s", guild_id)
 
-        state = music_manager.get_player(
-            guild_id
-        )
+        state = music_manager.get_player(guild_id)
 
         state.queue.clear()
 
@@ -276,24 +225,14 @@ class MusicEngine:
         state.loop_track = False
         state.loop_queue = False
 
-        # ==========================================
         # DELETE PLAYER MESSAGE
-        # ==========================================
-
         try:
-
             if state.player_message_id:
 
-                channel = player.guild.get_channel(
-                    state.player_channel_id
-                )
+                channel = player.guild.get_channel(state.player_channel_id)
 
                 if channel:
-
-                    message = await channel.fetch_message(
-                        state.player_message_id
-                    )
-
+                    message = await channel.fetch_message(state.player_message_id)
                     await message.delete()
 
         except Exception:
@@ -302,34 +241,31 @@ class MusicEngine:
         state.player_message_id = None
         state.player_channel_id = None
 
-        task = self._ui_tasks.pop(
-            guild_id,
-            None
-        )
+        task = self._ui_tasks.pop(guild_id, None)
 
         if task:
             task.cancel()
 
+        self._ui_running.discard(guild_id)
+
         try:
-
             await player.stop()
-
         except Exception:
             pass
 
         try:
-
             await player.disconnect()
-
         except Exception:
             pass
 
         await self._update_ui(player)
 
     # =====================================================
-    # Previous Track
+    # PREVIOUS TRACK
     # =====================================================
+
     async def previous(self, player: wavelink.Player):
+
         guild_id = player.guild.id
         state = music_manager.get_player(guild_id)
 
@@ -338,13 +274,10 @@ class MusicEngine:
         if not history or len(history) < 2:
             return
 
-        # current track is last element
-        try:
-            # remove current
-            history.pop()
-            prev_track = history.pop()
-        except Exception:
-            return
+        prev_track = history[-2]
+
+        # remove current only
+        history.pop()
 
         state.queue._queue.appendleft(prev_track)
 
@@ -353,8 +286,9 @@ class MusicEngine:
         state.current_duration = None
 
         await player.stop()
-        await asyncio.sleep(0.25)
-        await self._play_next(player)
+
+        # IMPORTANT:
+        # DO NOT call _play_next here
 
 
     # =====================================================
@@ -364,16 +298,9 @@ class MusicEngine:
     async def _update_ui(self, player):
 
         try:
-
-            await player_message_manager.update(
-                player.guild
-            )
-
+            await player_message_manager.update(player.guild)
         except Exception:
-
-            logging.exception(
-                "[MUSIC] UI update failed"
-            )
+            logging.exception("[MUSIC] UI update failed")
 
     # =====================================================
     # UI LOOP
@@ -383,56 +310,40 @@ class MusicEngine:
 
         guild_id = player.guild.id
 
-        old = self._ui_tasks.pop(
-            guild_id,
-            None
-        )
+        old = self._ui_tasks.pop(guild_id, None)
 
         if old:
             old.cancel()
 
-        logging.info(
-            "[UI_LOOP] started guild=%s",
-            guild_id
-        )
+        logging.info("[UI_LOOP] started guild=%s", guild_id)
 
-        self._ui_tasks[guild_id] = (
-            asyncio.create_task(
-                self._ui_tick(player)
-            )
+        self._ui_running.add(guild_id)
+
+        self._ui_tasks[guild_id] = asyncio.create_task(
+            self._ui_tick(player)
         )
 
     async def _ui_tick(self, player):
 
-        try:
+        guild_id = player.guild.id
 
+        try:
             while True:
 
-                state = music_manager.get_player(
-                    player.guild.id
-                )
+                state = music_manager.get_player(guild_id)
 
                 if not state.current:
-
-                    logging.info(
-                        "[UI_LOOP] exiting no current track"
-                    )
-
+                    logging.info("[UI_LOOP] exiting no current track")
                     return
 
-                await self._update_ui(
-                    player
-                )
-
+                await self._update_ui(player)
                 await asyncio.sleep(5)
 
         except asyncio.CancelledError:
+            logging.info("[UI_LOOP] cancelled")
 
-            logging.info(
-                "[UI_LOOP] cancelled"
-            )
-
-            return
+        finally:
+            self._ui_running.discard(guild_id)
 
 
 engine = MusicEngine()
