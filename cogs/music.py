@@ -89,7 +89,8 @@ class MusicCog(commands.Cog):
                 f" (+{len(tracks)-1})"
                 if len(tracks) > 1
                 else ""
-            )
+            ),
+            ephemeral=True
         )
 
     # =====================================================
@@ -109,7 +110,8 @@ class MusicCog(commands.Cog):
             await engine.stop(player)
 
         await interaction.followup.send(
-            "🛑 Stopped"
+            "🛑 Stopped",
+            ephemeral=True
         )
 
     # =====================================================
@@ -129,7 +131,8 @@ class MusicCog(commands.Cog):
             await engine.skip(player)
 
         await interaction.followup.send(
-            "⏭ Skipped"
+            "⏭ Skipped",
+            ephemeral=True
         )
 
     # =====================================================
@@ -153,7 +156,8 @@ class MusicCog(commands.Cog):
                 pass
 
         await interaction.followup.send(
-            "⏸ Paused"
+            "⏸ Paused",
+            ephemeral=True
         )
 
     # =====================================================
@@ -177,7 +181,8 @@ class MusicCog(commands.Cog):
                 pass
 
         await interaction.followup.send(
-            "▶ Resumed"
+            "▶ Resumed",
+            ephemeral=True
         )
 
     # =====================================================
@@ -200,7 +205,8 @@ class MusicCog(commands.Cog):
         state.queue.shuffle()
 
         await interaction.response.send_message(
-            "🔀 Queue shuffled."
+            "🔀 Queue shuffled.",
+            ephemeral=True
         )
 
     # =====================================================
@@ -222,7 +228,8 @@ class MusicCog(commands.Cog):
         await player.set_volume(percent)
 
         await interaction.response.send_message(
-            f"🔊 Volume set to {percent}%"
+            f"🔊 Volume set to {percent}%",
+            ephemeral=True
         )
 
     # =====================================================
