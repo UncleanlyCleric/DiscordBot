@@ -327,6 +327,37 @@ class MusicEngine:
         await self._update_ui(player)
 
     # =====================================================
+    # Previous Track
+    # =====================================================
+    async def previous(self, player: wavelink.Player):
+        guild_id = player.guild.id
+        state = music_manager.get_player(guild_id)
+
+        history = getattr(state, "history", None)
+
+        if not history or len(history) < 2:
+            return
+
+        # current track is last element
+        try:
+            # remove current
+            history.pop()
+            prev_track = history.pop()
+        except Exception:
+            return
+
+        state.queue._queue.appendleft(prev_track)
+
+        state.current = None
+        state.current_started_at = None
+        state.current_duration = None
+
+        await player.stop()
+        await asyncio.sleep(0.25)
+        await self._play_next(player)
+
+
+    # =====================================================
     # UI UPDATE
     # =====================================================
 
