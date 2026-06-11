@@ -24,6 +24,8 @@ services:
     networks:
       - botnet
 
+    database:
+      path: "storage/db/bot.db"
 
   bot:
     build: .
