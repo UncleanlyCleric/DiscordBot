@@ -1,5 +1,6 @@
 import discord
 import time
+import re
 
 
 def _format_time(ms):
@@ -33,6 +34,27 @@ def _progress_bar(current, total, size=16):
     )
 
 
+def _youtube_thumbnail(uri):
+
+    if not uri:
+        return None
+
+    match = re.search(
+        r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})",
+        uri
+    )
+
+    if not match:
+        return None
+
+    video_id = match.group(1)
+
+    return (
+        f"https://img.youtube.com/vi/"
+        f"{video_id}/hqdefault.jpg"
+    )
+
+
 def build_now_playing_embed(state):
 
     embed = discord.Embed(
@@ -57,18 +79,6 @@ def build_now_playing_embed(state):
     # =====================================================
     # ALBUM ART
     # =====================================================
-    import logging
-
-    playable = getattr(track, "playable", None)
-
-    logging.info(
-        "[TRACK DEBUG] artwork=%s artwork_url=%s thumbnail=%s uri=%s",
-        getattr(playable, "artwork", None),
-        getattr(playable, "artwork_url", None),
-        getattr(playable, "thumbnail", None),
-        getattr(playable, "uri", None),
-    )
-
 
     artwork = None
 
@@ -80,12 +90,21 @@ def build_now_playing_embed(state):
             or getattr(playable, "thumbnail", None)
         )
 
+    # YouTube fallback
+    if not artwork:
+
+        artwork = _youtube_thumbnail(
+            getattr(track, "uri", None)
+        )
+
     if artwork:
 
         try:
+
             embed.set_thumbnail(
                 url=str(artwork)
             )
+
         except Exception:
             pass
 
