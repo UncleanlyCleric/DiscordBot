@@ -170,6 +170,65 @@ class MusicPlayerView(discord.ui.View):
         )
 
     # =====================================================
+    # HISTORY
+    # ===================================================== 
+
+    @discord.ui.button(
+    emoji="🕘",
+    style=discord.ButtonStyle.secondary,
+    custom_id="music_history",
+    row=1
+    )
+    
+    async def history(self, interaction, button):
+
+        state = self._state(
+            interaction.guild.id
+        )
+
+        history = getattr(
+            state,
+            "history",
+            []
+        )
+
+        if not history:
+
+            await interaction.response.send_message(
+                "No playback history.",
+                ephemeral=True
+            )
+
+            return
+
+        current = state.current
+
+        lines = []
+
+        if current:
+
+            lines.append(
+                f"▶ Current:\n{current.title}\n"
+            )
+
+        lines.append(
+            "Recently Played:"
+        )
+
+        for i, track in enumerate(
+            reversed(history[-15:])
+        ):
+
+            lines.append(
+                f"{i+1}. {track.title}"
+            )
+
+        await interaction.response.send_message(
+            "\n".join(lines),
+            ephemeral=True
+        )
+
+    # =====================================================
     # TRACK LOOP
     # =====================================================
 

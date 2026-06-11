@@ -50,7 +50,6 @@ class MusicEngine:
             )
             return
 
-        logging.info("[MUSIC] start() beginning playback")
 
         await self._play_next(player)
 
@@ -99,16 +98,8 @@ class MusicEngine:
 
         state.current_duration = duration
 
-        logging.info(
-            "[PLAY_NEXT] now playing='%s' remaining=%s",
-            next_track.title,
-            len(state.queue.all())
-        )
-
         try:
             await player.play(next_track.playable)
-
-            logging.info("[PLAY_NEXT] player.play() success")
 
         except Exception:
             logging.exception(
@@ -218,8 +209,6 @@ class MusicEngine:
 
         guild_id = player.guild.id
 
-        logging.info("[STOP] guild=%s", guild_id)
-
         state = music_manager.get_player(guild_id)
 
         state.queue.clear()
@@ -294,13 +283,7 @@ class MusicEngine:
                 time.time()
                 - state.current_started_at
             )
-
-            logging.info(
-                "[PREVIOUS] elapsed=%.2f history=%s",
-                round(elapsed, 2),
-                [t.title for t in history]
-            )
-            
+          
             if elapsed > 3:
                 current = state.current
 
@@ -334,10 +317,6 @@ class MusicEngine:
         history.pop()
 
         previous_track = history.pop()
-
-        logging.info(
-            "[PREVIOUS] loading previous track='%s'"
-        )
 
         state.queue.add_front(
             previous_track
