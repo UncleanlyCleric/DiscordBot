@@ -267,7 +267,7 @@ class MusicEngine:
         await self._update_ui(player)
 
     # =====================================================
-    # PREVIOUS TRACK
+    # PREVIOUS TRACK / RESTART TRACK
     # =====================================================
 
     async def previous(self, player):
@@ -276,25 +276,50 @@ class MusicEngine:
             player.guild.id
         )
 
+        # -----------------------------------------
+        # Spotify behavior:
+        # >3 sec = restart current
+        # <=3 sec = previous track
+        # -----------------------------------------
+
+        if state.current_started_at:
+            elapsed = (
+                time.time()
+                - state.current_started_at
+            )
+
+            if elapsed > 3:
+                current = state.current
+
+                if current:
+                    state.queue.add_front(
+                        current
+                    )
+                    self._manual_skip.add(
+                        player.guild.id
+                    )
+
+                    try:
+                        await player.stop()
+                    except Exception:
+                        pass
+
+                    await self._play_next(player)
+
+                return
+
         history = getattr(
             state,
             "history",
             []
         )
 
-        logging.info(
-           "[PREVIOUS] history=%s",
-            [t.title for t in history]
-        )
-
-
         if len(history) < 2:
             return
 
-        # remove current track
+        # remove current
         history.pop()
 
-        # grab previous track
         previous_track = history.pop()
 
         state.queue.add_front(

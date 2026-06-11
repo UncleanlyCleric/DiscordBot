@@ -21,12 +21,36 @@ class MusicPlayerView(discord.ui.View):
         return build_now_playing_embed(state)
     
     # =====================================================
+    # PREVIOUS
+    # =====================================================
+
+    @discord.ui.button(
+        emoji="⏮",   
+        style=discord.ButtonStyle.primary,
+        custom_id="music_previous",
+        row=0
+    )
+    async def previous(self, interaction, button):
+
+        player = interaction.guild.voice_client
+
+        if player:
+            from services.music.player_engine import engine
+            await engine.previous(player)
+
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
+
+    
+    # =====================================================
     # PAUSE / RESUME
     # =====================================================
 
     @discord.ui.button(
         emoji="⏯",
-        style=discord.ButtonStyle.secondary,
+        style=discord.ButtonStyle.primary,
         custom_id="music_pause_resume",
         row=0
     )
@@ -91,28 +115,6 @@ class MusicPlayerView(discord.ui.View):
         except Exception:
             pass
         
-    # =====================================================
-    # PREVIOUS
-    # =====================================================
-
-    @discord.ui.button(
-        emoji="⏮",   
-        style=discord.ButtonStyle.danger,
-        custom_id="music_previous",
-        row=0
-    )
-    async def previous(self, interaction, button):
-
-        player = interaction.guild.voice_client
-
-        if player:
-            from services.music.player_engine import engine
-            await engine.previous(player)
-
-        try:
-            await interaction.response.defer()
-        except Exception:
-            pass
 
     # =====================================================
     # SHUFFLE
