@@ -276,31 +276,47 @@ class MusicEngine:
     # PREVIOUS TRACK
     # =====================================================
 
-    async def previous(self, player: wavelink.Player):
+    async def previous(self, player):
 
-        guild_id = player.guild.id
-        state = music_manager.get_player(guild_id)
+        state = music_manager.get_player(
+            player.guild.id
+        )
 
-        history = getattr(state, "history", None)
+        history = getattr(
+            state,
+            "history",
+            []
+        )
 
-        if not history or len(history) < 2:
+        logging.info(
+           "[PREVIOUS] history=%s",
+            [t.title for t in history]
+        )
+
+
+        if len(history) < 2:
             return
 
-        prev_track = history[-2]
-
-        # remove current only
+        # remove current track
         history.pop()
 
-        state.queue._queue.appendleft(prev_track)
+        # grab previous track
+        previous_track = history.pop()
 
-        state.current = None
-        state.current_started_at = None
-        state.current_duration = None
+        state.queue.add_front(
+            previous_track
+        )
 
-        await player.stop()
+        self._manual_skip.add(
+            player.guild.id
+        )
 
-        # IMPORTANT:
-        # DO NOT call _play_next here
+        try:
+            await player.stop()
+        except Exception:
+            pass
+
+        await self._play_next(player)
 
 
     # =====================================================
