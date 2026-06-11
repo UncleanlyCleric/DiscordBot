@@ -5,10 +5,11 @@ import wavelink
 
 @dataclass
 class Track:
+
     title: str
     author: Optional[str]
     uri: str
     requester_id: int
-
-    # 🔥 REAL PLAYABLE (MANDATORY)
+    artwork: Optional[str] = None
     playable: wavelink.Playable = None
+    artwork: Optional[str] = None

@@ -48,6 +48,35 @@ def build_now_playing_embed(state):
 
         return embed
 
+    playable = getattr(
+        track,
+        "playable",
+        None
+    )
+
+    # =====================================================
+    # ALBUM ART
+    # =====================================================
+
+    artwork = None
+
+    if playable:
+
+        artwork = (
+            getattr(playable, "artwork", None)
+            or getattr(playable, "artwork_url", None)
+            or getattr(playable, "thumbnail", None)
+        )
+
+    if artwork:
+
+        try:
+            embed.set_thumbnail(
+                url=str(artwork)
+            )
+        except Exception:
+            pass
+
     # =====================================================
     # TRACK
     # =====================================================
@@ -63,6 +92,18 @@ def build_now_playing_embed(state):
         embed.add_field(
             name="Artist",
             value=track.author,
+            inline=True
+        )
+
+    # =====================================================
+    # REQUESTER
+    # =====================================================
+
+    if getattr(track, "requester_id", None):
+
+        embed.add_field(
+            name="Requested By",
+            value=f"<@{track.requester_id}>",
             inline=True
         )
 
@@ -150,6 +191,14 @@ def build_now_playing_embed(state):
             f"🔁 Queue: {'On' if state.loop_queue else 'Off'}"
         ),
         inline=False
+    )
+
+    # =====================================================
+    # FOOTER
+    # =====================================================
+
+    embed.set_footer(
+        text="Music Player"
     )
 
     return embed

@@ -44,14 +44,17 @@ class MusicResolver:
 
         try:
 
-            # URLs should be resolved normally
             if is_url:
-                results = await wavelink.Playable.search(query)
 
-            # Text searches should favor YouTube Music
-            else:
                 results = await wavelink.Playable.search(
-                    f"ytsearch:{query}"
+                    query
+                )
+
+            else:
+
+                # Better music results than generic ytsearch
+                results = await wavelink.Playable.search(
+                    f"ytmsearch:{query}"
                 )
 
         except Exception:
@@ -64,11 +67,18 @@ class MusicResolver:
         # PLAYLISTS
         # =====================================================
 
-        playlist = getattr(results, "playlist", None)
+        playlist = getattr(
+            results,
+            "playlist",
+            None
+        )
 
         if (
             playlist
-            or isinstance(results, wavelink.Playlist)
+            or isinstance(
+                results,
+                wavelink.Playlist
+            )
         ):
 
             tracks = getattr(
@@ -80,10 +90,19 @@ class MusicResolver:
             return [
                 Track(
                     title=t.title,
-                    author=getattr(t, "author", None),
+                    author=getattr(
+                        t,
+                        "author",
+                        None
+                    ),
                     uri=t.uri,
                     requester_id=requester_id,
                     playable=t,
+                    artwork=getattr(
+                        t,
+                        "artwork",
+                        None
+                    ),
                 )
                 for t in tracks
             ]
@@ -97,16 +116,25 @@ class MusicResolver:
             return [
                 Track(
                     title=t.title,
-                    author=getattr(t, "author", None),
+                    author=getattr(
+                        t,
+                        "author",
+                        None
+                    ),
                     uri=t.uri,
                     requester_id=requester_id,
                     playable=t,
+                    artwork=getattr(
+                        t,
+                        "artwork",
+                        None
+                    ),
                 )
                 for t in results
             ]
 
         # =====================================================
-        # FILTER GARBAGE RESULTS
+        # FILTER BAD RESULTS
         # =====================================================
 
         filtered = []
@@ -145,10 +173,19 @@ class MusicResolver:
         return [
             Track(
                 title=best.title,
-                author=getattr(best, "author", None),
+                author=getattr(
+                    best,
+                    "author",
+                    None
+                ),
                 uri=best.uri,
                 requester_id=requester_id,
                 playable=best,
+                artwork=getattr(
+                    best,
+                    "artwork",
+                    None
+                ),
             )
         ]
 
