@@ -89,12 +89,6 @@ class MusicEngine:
 
         state.last_track = next_track
 
-        if not hasattr(state, "history"):
-            state.history = []
-
-        state.history.append(next_track)
-        state.history = state.history[-50:]
-
         state.current_started_at = time.time()
 
         duration = getattr(
