@@ -189,8 +189,6 @@ class MusicEngine:
         except Exception:
             pass
 
-        await self._play_next(player)
-
     # =====================================================
     # STOP
     # =====================================================
@@ -283,8 +281,6 @@ class MusicEngine:
                     await player.stop()
                 except Exception:
                     pass
-
-                await self._play_next(player)
 
             return
 
