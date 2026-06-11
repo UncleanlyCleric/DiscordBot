@@ -270,13 +270,6 @@ class MusicEngine:
             player.guild.id
         )
 
-        logging.info(
-            "[PREVIOUS] current=%s history=%s queue=%s",
-            getattr(state.current, "title", None),
-            len(history),
-            len(state.queue.all())
-        )
-
         elapsed = 0
 
         if state.current_started_at:
@@ -317,7 +310,14 @@ class MusicEngine:
             "history",
             []
         )
-
+        
+        logging.info(
+            "[PREVIOUS] current=%s history=%s queue=%s",
+            getattr(state.current, "title", None),
+            len(history),
+            len(state.queue.all())
+        )
+        
         if len(history) < 2:
             return
 
