@@ -143,7 +143,7 @@ class MusicPlayerView(discord.ui.View):
 
     @discord.ui.button(
         emoji="📜",
-        style=discord.ButtonStyle.primary,
+        style=discord.ButtonStyle.secondary,
         custom_id="music_queue",
         row=1
     )

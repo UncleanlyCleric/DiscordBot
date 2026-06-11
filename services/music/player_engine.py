@@ -63,6 +63,18 @@ class MusicEngine:
 
         next_track = state.queue.next()
 
+        logging.info(
+            "[PLAY_NEXT] queue_before=%s",
+            len(state.queue.all())
+)
+
+        logging.info(
+            "[PLAY_NEXT] selected=%s queue_remaining=%s history=%s",
+            getattr(next_track, "title", None),
+            len(state.queue.all()),
+            len(getattr(state, "history", []))
+        )
+
         if not next_track:
 
             state.current = None
@@ -71,6 +83,12 @@ class MusicEngine:
 
             await self._update_ui(player)
             return
+        
+        logging.info(
+            "[PLAY_NEXT] playing=%s queue_after=%s",
+            next_track.title,
+            len(state.queue.all())
+        )
 
         # =====================================================
         # HISTORY
@@ -131,7 +149,6 @@ class MusicEngine:
 
         if guild_id in self._manual_skip:
             self._manual_skip.remove(guild_id)
-            return
 
         state = music_manager.get_player(guild_id)
 
@@ -178,7 +195,7 @@ class MusicEngine:
     # SKIP
     # =====================================================
 
-    async def skip(self, player: wavelink.Player):
+    async def skip(self, player):
 
         guild_id = player.guild.id
 
@@ -251,6 +268,13 @@ class MusicEngine:
 
         state = music_manager.get_player(
             player.guild.id
+        )
+
+        logging.info(
+            "[PREVIOUS] current=%s history=%s queue=%s",
+            getattr(state.current, "title", None),
+            len(history),
+            len(state.queue.all())
         )
 
         elapsed = 0
