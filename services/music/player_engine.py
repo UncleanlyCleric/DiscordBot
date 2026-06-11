@@ -184,25 +184,29 @@ class MusicEngine:
     async def skip(self, player: wavelink.Player):
 
         guild_id = player.guild.id
-
         logging.info("[SKIP] guild=%s", guild_id)
 
         self._manual_skip.add(guild_id)
 
         state = music_manager.get_player(guild_id)
 
-        state.current = None
-        state.current_started_at = None
-        state.current_duration = None
-
         try:
             await player.stop()
         except Exception:
             logging.exception("[SKIP] stop failed")
 
-        # IMPORTANT:
-        # DO NOT call _play_next here
+        # IMPORTANT: do NOT rely on event firing
+        await asyncio.sleep(0.15)
 
+        # FORCE progression if nothing started playing next
+        if not state.queue.next():
+            state.current = None
+            return
+
+        # rewind queue pointer back (because .next() consumed it)
+        state.queue._queue.appendleft(state.queue._queue.popleft())
+
+        await self._play_next(player)
 
     # =====================================================
     # STOP
