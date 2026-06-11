@@ -37,6 +37,9 @@ services:
     volumes:
       - ./storage/db:/app/storage/db
 
+    database:
+      path: "/app/storage/db/bot.db"
+
     networks:
       - botnet
 
