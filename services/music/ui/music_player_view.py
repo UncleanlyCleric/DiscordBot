@@ -215,8 +215,12 @@ class MusicPlayerView(discord.ui.View):
             "Recently Played:"
         )
 
+        recent = list(
+            reversed(history[:-1])
+        )[:15]
+
         for i, track in enumerate(
-            reversed(history[-15:])
+            recent
         ):
 
             lines.append(
