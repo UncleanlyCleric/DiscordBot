@@ -16,16 +16,12 @@ services:
     volumes:
       - ./lavalink/application.yml:/opt/Lavalink/application.yml
       - ./lavalink/plugins:/opt/Lavalink/plugins
-      - ./storage/db:/app/storage/db
 
     ports:
       - "2333:2333"
 
     networks:
       - botnet
-
-    database:
-      path: "storage/db/bot.db"
 
   bot:
     build: .
@@ -37,6 +33,9 @@ services:
 
     depends_on:
       - lavalink
+
+    volumes:
+      - ./storage/db:/app/storage/db
 
     networks:
       - botnet
