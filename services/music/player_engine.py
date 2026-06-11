@@ -132,27 +132,6 @@ class MusicEngine:
         if player.guild.id not in self._ui_running:
             self._start_ui_loop(player)
 
-    async def back(self, player):
-
-        state = music_manager.get_player(
-            player.guild.id
-        )
-
-        if not getattr(state, "history", None):
-            return
-
-        if len(state.history) < 2:
-            return
-
-        # current track
-        state.history.pop()
-
-        previous = state.history.pop()
-
-        state.queue.add_front(previous)
-
-        await self.skip(player)
-
     # =====================================================
     # TRACK END
     # =====================================================

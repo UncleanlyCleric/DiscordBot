@@ -21,32 +21,6 @@ class MusicPlayerView(discord.ui.View):
         return build_now_playing_embed(state)
     
     # =====================================================
-    # Music Back
-    # =====================================================
-    @discord.ui.button(
-    emoji="⏮",
-    style=discord.ButtonStyle.primary,
-    custom_id="music_back",
-    row=0
-    )
-    async def back(self, interaction, button):
-
-        player = interaction.guild.voice_client
-
-        if player:
-
-            from services.music.player_engine import engine
-
-            await engine.back(player)
-
-        await interaction.response.edit_message(
-            embed=self._refresh_embed(
-                interaction.guild.id
-            ),
-            view=self
-        )
-
-    # =====================================================
     # PAUSE / RESUME
     # =====================================================
 
