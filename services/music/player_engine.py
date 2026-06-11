@@ -148,11 +148,15 @@ class MusicEngine:
         guild_id = player.guild.id
 
         if guild_id in self._manual_skip:
+
             self._manual_skip.remove(guild_id)
 
-        state = music_manager.get_player(guild_id)
+            state.current = None
+            state.current_started_at = None
+            state.current_duration = None
 
-        finished_track = state.current
+            await self._play_next(player)
+            return
 
         # ==========================================
         # TRACK LOOP
@@ -340,9 +344,7 @@ class MusicEngine:
         except Exception:
             pass
 
-        await self._play_next(player)
-
-
+        
     # =====================================================
     # UI UPDATE
     # =====================================================
