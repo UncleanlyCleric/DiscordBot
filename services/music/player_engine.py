@@ -262,9 +262,34 @@ class MusicEngine:
         state.current_started_at = None
         state.current_duration = None
 
-        # NEW
         state.loop_track = False
         state.loop_queue = False
+
+        # ==========================================
+        # DELETE PLAYER MESSAGE
+        # ==========================================
+
+        try:
+
+            if state.player_message_id:
+
+                channel = player.guild.get_channel(
+                    state.player_channel_id
+                )
+
+                if channel:
+
+                    message = await channel.fetch_message(
+                        state.player_message_id
+                    )
+
+                    await message.delete()
+
+        except Exception:
+            pass
+
+        state.player_message_id = None
+        state.player_channel_id = None
 
         task = self._ui_tasks.pop(
             guild_id,
