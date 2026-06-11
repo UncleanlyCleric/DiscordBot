@@ -72,21 +72,25 @@ class MusicEngine:
             await self._update_ui(player)
             return
 
-        if not hasattr(state, "history"):
-            state.history = []
-
-        state.history.append(next_track)
-
-        # keep history from growing forever
-        state.history = state.history[-50:]
-
-        state.current = next_track
-
         # =====================================================
         # HISTORY
         # =====================================================
 
+        if not hasattr(state, "history"):
+            state.history = []
+
+        state.current = next_track
         state.last_track = next_track
+
+        # only add if not duplicate
+        if (
+            not state.history
+            or state.history[-1].uri != next_track.uri
+        ):
+            state.history.append(next_track)
+
+        # keep history from growing forever
+        state.history = state.history[-50:]
 
         state.current_started_at = time.time()
 
@@ -177,27 +181,13 @@ class MusicEngine:
     async def skip(self, player: wavelink.Player):
 
         guild_id = player.guild.id
-        logging.info("[SKIP] guild=%s", guild_id)
 
         self._manual_skip.add(guild_id)
-
-        state = music_manager.get_player(guild_id)
 
         try:
             await player.stop()
         except Exception:
-            logging.exception("[SKIP] stop failed")
-
-        # IMPORTANT: do NOT rely on event firing
-        await asyncio.sleep(0.15)
-
-        # FORCE progression if nothing started playing next
-        if not state.queue.next():
-            state.current = None
-            return
-
-        # rewind queue pointer back (because .next() consumed it)
-        state.queue._queue.appendleft(state.queue._queue.popleft())
+            pass
 
         await self._play_next(player)
 
@@ -264,45 +254,43 @@ class MusicEngine:
         state = music_manager.get_player(
             player.guild.id
         )
-        history = getattr(
-            state,
-            "history",
-            []
-        )
 
-        elapsed = 0 
-
-        # -----------------------------------------
-        # Spotify behavior:
-        # >3 sec = restart current
-        # <=3 sec = previous track
-        # -----------------------------------------
+        elapsed = 0
 
         if state.current_started_at:
             elapsed = (
                 time.time()
                 - state.current_started_at
             )
-          
-            if elapsed > 3:
-                current = state.current
 
-                if current:
-                    state.queue.add_front(
-                        current
-                    )
-                    self._manual_skip.add(
-                        player.guild.id
-                    )
+        # -----------------------------------------
+        # restart current track if >3 seconds
+        # -----------------------------------------
 
-                    try:
-                        await player.stop()
-                    except Exception:
-                        pass
+        if elapsed > 3:
 
-                    await self._play_next(player)
+            if state.current:
 
-                return
+                state.queue.add_front(
+                    state.current
+                )
+
+                self._manual_skip.add(
+                    player.guild.id
+                )
+
+                try:
+                    await player.stop()
+                except Exception:
+                    pass
+
+                await self._play_next(player)
+
+            return
+
+        # -----------------------------------------
+        # previous track if <=3 seconds
+        # -----------------------------------------
 
         history = getattr(
             state,
@@ -313,10 +301,11 @@ class MusicEngine:
         if len(history) < 2:
             return
 
-        # remove current
+        # remove current track entry
         history.pop()
 
-        previous_track = history.pop()
+        # look at previous track
+        previous_track = history[-1]
 
         state.queue.add_front(
             previous_track
