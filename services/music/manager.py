@@ -28,6 +28,9 @@ class MusicState:
 
     last_track: Any = None
 
+    history: list = field(default_factory=list)
+    last_track = None
+
 
 class MusicManager:
 
