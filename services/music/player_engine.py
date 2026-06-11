@@ -56,75 +56,86 @@ class MusicEngine:
 
         await self._play_next(player)
 
-    # =====================================================
-    # PLAY NEXT
-    # =====================================================
+# =====================================================
+# PLAY NEXT
+# =====================================================
 
-    async def _play_next(self, player: wavelink.Player):
+async def _play_next(self, player: wavelink.Player):
 
-        state = music_manager.get_player(
-            player.guild.id
-        )
+    state = music_manager.get_player(
+        player.guild.id
+    )
 
-        next_track = state.queue.next()
+    next_track = state.queue.next()
 
-        if not next_track:
+    if not next_track:
 
-            state.current = None
-            state.current_started_at = None
-            state.current_duration = None
-
-            await self._update_ui(player)
-
-            return
-
-        state.current = next_track
-
-        # NEW
-        state.last_track = next_track
-
-        state.current_started_at = time.time()
-
-        duration = getattr(
-            getattr(next_track, "playable", None),
-            "length",
-            None
-        )
-
-        state.current_duration = duration
-
-        logging.info(
-            "[PLAY_NEXT] now playing='%s' remaining=%s",
-            next_track.title,
-            len(state.queue.all())
-        )
-
-        try:
-
-            await player.play(
-                next_track.playable
-            )
-
-            logging.info(
-                "[PLAY_NEXT] player.play() success"
-            )
-
-        except Exception:
-
-            logging.exception(
-                "[PLAY_NEXT] failed playing %s",
-                next_track.title
-            )
-
-            state.current = None
-
-            await self._play_next(player)
-
-            return
+        state.current = None
+        state.current_started_at = None
+        state.current_duration = None
 
         await self._update_ui(player)
 
-        self._start_ui_loop(player)
+        return
+
+    state.current = next_track
+
+    # =====================================================
+    # HISTORY
+    # =====================================================
+
+    state.last_track = next_track
+
+    if not hasattr(state, "history"):
+        state.history = []
+
+    state.history.append(next_track)
+
+    # keep latest 50
+    state.history = state.history[-50:]
+
+    state.current_started_at = time.time()
+
+    duration = getattr(
+        getattr(next_track, "playable", None),
+        "length",
+        None
+    )
+
+    state.current_duration = duration
+
+    logging.info(
+        "[PLAY_NEXT] now playing='%s' remaining=%s",
+        next_track.title,
+        len(state.queue.all())
+    )
+
+    try:
+
+        await player.play(
+            next_track.playable
+        )
+
+        logging.info(
+            "[PLAY_NEXT] player.play() success"
+        )
+
+    except Exception:
+
+        logging.exception(
+            "[PLAY_NEXT] failed playing %s",
+            next_track.title
+        )
+
+        state.current = None
+
+        await self._play_next(player)
+
+        return
+
+    await self._update_ui(player)
+
+    self._start_ui_loop(player)
 
     # =====================================================
     # TRACK END
@@ -145,6 +156,62 @@ class MusicEngine:
         )
 
         finished_track = state.current
+
+        # ==========================================
+        # TRACK LOOP
+        # ==========================================
+
+        if (
+            state.loop_track
+            and finished_track
+        ):
+
+            state.current = None
+            state.current_started_at = None
+            state.current_duration = None
+
+            try:
+
+                state.queue._queue.appendleft(
+                    finished_track
+                )
+
+            except Exception:
+
+                state.queue.add(
+                    finished_track
+                )
+
+            await asyncio.sleep(0.25)
+
+            await self._play_next(player)
+
+            return
+
+        # ==========================================
+        # QUEUE LOOP
+        # ==========================================
+
+        if (
+            state.loop_queue
+            and finished_track
+        ):
+
+            state.queue.add(
+                finished_track
+            )
+
+        # ==========================================
+        # NORMAL FLOW
+        # ==========================================
+
+        state.current = None
+        state.current_started_at = None
+        state.current_duration = None
+
+        await asyncio.sleep(0.25)
+
+        await self._play_next(player)
 
         # ==========================================
         # TRACK LOOP

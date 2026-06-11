@@ -90,6 +90,29 @@ class MusicPlayerView(discord.ui.View):
             await interaction.response.defer()
         except Exception:
             pass
+        
+    # =====================================================
+    # PREVIOUS
+    # =====================================================
+
+    @discord.ui.button(
+        emoji="⏮",   
+        style=discord.ButtonStyle.danger,
+        custom_id="music_previous",
+        row=0
+    )
+    async def previous(self, interaction, button):
+
+        player = interaction.guild.voice_client
+
+        if player:
+            from services.music.player_engine import engine
+            await engine.previous(player)
+
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
 
     # =====================================================
     # SHUFFLE
