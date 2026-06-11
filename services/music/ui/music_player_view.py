@@ -86,10 +86,10 @@ class MusicPlayerView(discord.ui.View):
             from services.music.player_engine import engine
             await engine.stop(player)
 
-        await interaction.response.edit_message(
-            embed=self._refresh_embed(interaction.guild.id),
-            view=self
-        )
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
 
     # =====================================================
     # SHUFFLE

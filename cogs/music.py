@@ -46,7 +46,9 @@ class MusicCog(commands.Cog):
         query: str
     ):
 
-        await interaction.response.defer()
+        await interaction.response.defer(
+            ephemeral=True
+        )
 
         player = await self._get_player(
             interaction
@@ -255,11 +257,13 @@ class MusicCog(commands.Cog):
 
             if current:
                 return await interaction.response.send_message(
-                    f"▶ Now Playing\n\n{current.title}"
+                    f"▶ Now Playing\n\n{current.title}",
+                    ephemeral=True
                 )
 
             return await interaction.response.send_message(
-                "Queue empty."
+                "Queue empty.",
+                ephemeral=True
             )
 
         lines = []
@@ -288,7 +292,8 @@ class MusicCog(commands.Cog):
             )
 
         await interaction.response.send_message(
-            "\n".join(lines)
+            "\n".join(lines),
+            ephemeral=True
         )
 
     # =====================================================
