@@ -24,6 +24,10 @@ class MusicQueue:
     def add_many(self, tracks: List[Track]):
         self._queue.extend(tracks)
 
+    def add_front(self, track):
+        self._queue.appendleft(track)
+    
+
     # =====================================================
     # PLAYBACK
     # =====================================================

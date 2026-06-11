@@ -1,5 +1,5 @@
 database:
-  path: "storage/bot.db"
+  path: "storage/db/bot.db"
 
 logging:
   level: "INFO"

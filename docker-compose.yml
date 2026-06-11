@@ -10,9 +10,13 @@ services:
     environment:
       - _JAVA_OPTIONS=-Xmx1G
 
+    env_file:
+      - .env
+
     volumes:
       - ./lavalink/application.yml:/opt/Lavalink/application.yml
       - ./lavalink/plugins:/opt/Lavalink/plugins
+      - ./storage/db:/app/storage/db
 
     ports:
       - "2333:2333"
