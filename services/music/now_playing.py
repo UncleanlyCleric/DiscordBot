@@ -57,6 +57,18 @@ def build_now_playing_embed(state):
     # =====================================================
     # ALBUM ART
     # =====================================================
+    import logging
+
+    playable = getattr(track, "playable", None)
+
+    logging.info(
+        "[TRACK DEBUG] artwork=%s artwork_url=%s thumbnail=%s uri=%s",
+        getattr(playable, "artwork", None),
+        getattr(playable, "artwork_url", None),
+        getattr(playable, "thumbnail", None),
+        getattr(playable, "uri", None),
+    )
+
 
     artwork = None
 
