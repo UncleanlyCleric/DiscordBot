@@ -275,6 +275,13 @@ class MusicEngine:
         state = music_manager.get_player(
             player.guild.id
         )
+        history = getattr(
+            state,
+            "history",
+            []
+        )
+
+        elapsed = 0 
 
         # -----------------------------------------
         # Spotify behavior:
@@ -288,6 +295,12 @@ class MusicEngine:
                 - state.current_started_at
             )
 
+            logging.info(
+                "[PREVIOUS] elapsed=%.2f history=%s",
+                round(elapsed, 2),
+                [t.title for t in history]
+            )
+            
             if elapsed > 3:
                 current = state.current
 
@@ -321,6 +334,10 @@ class MusicEngine:
         history.pop()
 
         previous_track = history.pop()
+
+        logging.info(
+            "[PREVIOUS] loading previous track='%s'"
+        )
 
         state.queue.add_front(
             previous_track
