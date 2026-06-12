@@ -57,7 +57,7 @@ class DiscordBot(commands.Bot):
         logging.info("[BOOT] Connecting DB...")
         await db.connect()
 
-        logging.info(inspect.getfile(migration_runner.__class__))
+        logging.info("[BOOT] Database ready")
         # =====================================================
         # LAVALINK
         # =====================================================

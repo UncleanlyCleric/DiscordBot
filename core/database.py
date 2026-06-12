@@ -1,22 +1,16 @@
 import aiosqlite
-from typing import Any, Optional, Sequence, Union
+import logging
+
 from pathlib import Path
+from typing import Any, Optional, Sequence, Union
 
 from core.config import config
 
 
 class Database:
-    """
-    Async SQLite wrapper.
-    """
-
     def __init__(self):
         self.path = Path(config.db_path).resolve()
         self.conn: Optional[aiosqlite.Connection] = None
-
-        print("=" * 60)
-        print(f"[DB PATH FINAL] {self.path}")
-        print("=" * 60)
 
     async def connect(self):
 
@@ -25,13 +19,8 @@ class Database:
             exist_ok=True
         )
 
-        print("=" * 60)
-        print(f"[APP DB] {self.path}")
-        print(f"[DB EXISTS] {self.path.exists()}")
-        print("=" * 60)
-
         self.conn = await aiosqlite.connect(
-            str(self.path)
+            self.path
         )
 
         self.conn.row_factory = aiosqlite.Row
@@ -42,25 +31,10 @@ class Database:
 
         await self.conn.commit()
 
-        # -------------------------------------------------
-        # DEBUG: show tables actually present
-        # -------------------------------------------------
-        cursor = await self.conn.execute(
-            """
-            SELECT name
-            FROM sqlite_master
-            WHERE type='table'
-            ORDER BY name
-            """
+        logging.info(
+            "[DB] Connected (%s)",
+            self.path
         )
-
-        tables = await cursor.fetchall()
-
-        print("=" * 60)
-        print("[APP TABLES]")
-        for table in tables:
-            print(f"  - {table['name']}")
-        print("=" * 60)
 
         return self.conn
 
@@ -104,10 +78,7 @@ class Database:
 
             row = await cursor.fetchone()
 
-            return (
-                dict(row)
-                if row else None
-            )
+            return dict(row) if row else None
 
     async def fetchall(
         self,
@@ -126,14 +97,7 @@ class Database:
 
             rows = await cursor.fetchall()
 
-            return [
-                dict(r)
-                for r in rows
-            ]
-
-    # -------------------------------------------------
-    # GUILD BOOTSTRAP
-    # -------------------------------------------------
+            return [dict(r) for r in rows]
 
     async def ensure_guild(
         self,
@@ -167,5 +131,4 @@ class Database:
         )
 
 
-# Singleton
 db = Database()
