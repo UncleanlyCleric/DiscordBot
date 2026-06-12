@@ -56,14 +56,8 @@ class MusicResolver:
 
             else:
 
-                # prevent accidental double-prefixing
-                if query.startswith("ytmsearch:"):
-                    search_query = query
-                else:
-                    search_query = f"ytmsearch:{query}"
-
                 results = await wavelink.Playable.search(
-                    search_query
+                    query
                 )
 
                 # =================================================
