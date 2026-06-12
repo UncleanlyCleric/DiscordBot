@@ -77,6 +77,13 @@ class MusicResolver:
                     query
                 )
 
+            for i, track in enumerate(results[:10], start=1):
+                print(
+                    f"[SEARCH] {i}. "
+                    f"title={getattr(track, 'title', '')} | "
+                    f"author={getattr(track, 'author', '')}"
+                )
+
             else:
 
                 # =====================================================
