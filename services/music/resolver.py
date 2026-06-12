@@ -36,11 +36,39 @@ class MusicResolver:
         if not query:
             return []
 
+        # =====================================================
+        # URL DETECTION
+        # =====================================================
+
         is_url = (
             query.startswith("http")
             or re.search(APPLE_MUSIC, query)
             or re.search(SPOTIFY, query)
         )
+
+        # =====================================================
+        # 🎯 NEW: QUERY PARSING (MAJOR FIX)
+        # =====================================================
+
+        def parse_query(q: str):
+            q = q.strip()
+            parts = q.split()
+
+            # heuristic: "artist + track"
+            if len(parts) >= 2:
+                return {
+                    "artist": " ".join(parts[:-1]),
+                    "track": parts[-1],
+                    "raw": q
+                }
+
+            return {
+                "artist": None,
+                "track": q,
+                "raw": q
+            }
+
+        parsed = parse_query(query)
 
         try:
 
@@ -52,9 +80,17 @@ class MusicResolver:
 
             else:
 
-                # Better music results than generic ytsearch
+                # =================================================
+                # 🔥 FIX: SMART QUERY REWRITE
+                # =================================================
+
+                if parsed["artist"] and parsed["track"]:
+                    search_query = f'{parsed["artist"]} - {parsed["track"]}'
+                else:
+                    search_query = query
+
                 results = await wavelink.Playable.search(
-                    f"ytmsearch:{query}"
+                    f"ytmsearch:{search_query}"
                 )
 
         except Exception:
@@ -138,7 +174,6 @@ class MusicResolver:
         # =====================================================
 
         query_lower = query.lower()
-
         artist_intent = len(query_lower.split()) <= 4
 
         filtered = []
@@ -151,7 +186,7 @@ class MusicResolver:
                 ""
             ).lower()
 
-            # Only aggressively filter when NOT artist intent
+            # only filter aggressively when NOT artist intent
             if any(
                 bad in title
                 for bad in BAD_RESULTS
@@ -165,29 +200,30 @@ class MusicResolver:
             results = filtered
 
         # =====================================================
-        # ARTIST-AWARE RANKING BOOST (NEW)
+        # ARTIST-AWARE RANKING BOOST
         # =====================================================
 
         def score(track, query: str):
+
             q = query.lower()
             title = (getattr(track, "title", "") or "").lower()
             author = (getattr(track, "author", "") or "").lower()
 
             score = 0
 
-            # 🎯 EXACT ARTIST MATCH (HIGHEST PRIORITY)
+            # 🎯 exact artist match
             if q == author:
                 score += 200
 
-            # 🎯 ARTIST CONTAINS QUERY
+            # 🎯 artist contains query
             if q in author:
                 score += 150
 
-            # 🎧 TITLE MATCH
+            # 🎧 title match
             if q in title:
                 score += 50
 
-            # 🔎 WORD OVERLAP
+            # 🔎 word overlap
             if any(word in author for word in q.split()):
                 score += 30
 
