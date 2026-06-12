@@ -15,6 +15,8 @@ class MigrationRunner:
         if not self.schema_path.exists():
             raise FileNotFoundError(f"Schema file not found: {self.schema_path}")
 
+        print(f"[MIGRATIONS] PATH = {self.db_path}")
+
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             await db.execute("PRAGMA foreign_keys = ON;")
