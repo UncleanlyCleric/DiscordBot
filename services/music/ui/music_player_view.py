@@ -421,7 +421,7 @@ class MusicPlayerView(discord.ui.View):
         emoji="🔉",
         style=discord.ButtonStyle.secondary,
         custom_id="music_volume_down",
-        row=3
+        row=2
     )
     async def volume_down(self, interaction, button):
 
@@ -468,7 +468,7 @@ class MusicPlayerView(discord.ui.View):
         emoji="🔊",
         style=discord.ButtonStyle.secondary,
         custom_id="music_volume_up",
-        row=3
+        row=2
     )
     async def volume_up(self, interaction, button):
 

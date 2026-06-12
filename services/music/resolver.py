@@ -134,8 +134,12 @@ class MusicResolver:
             ]
 
         # =====================================================
-        # FILTER BAD RESULTS
+        # FILTER BAD RESULTS (SAFE VERSION)
         # =====================================================
+
+        query_lower = query.lower()
+
+        artist_intent = len(query_lower.split()) <= 4
 
         filtered = []
 
@@ -147,16 +151,53 @@ class MusicResolver:
                 ""
             ).lower()
 
+            # Only aggressively filter when NOT artist intent
             if any(
                 bad in title
                 for bad in BAD_RESULTS
             ):
-                continue
+                if not artist_intent:
+                    continue
 
             filtered.append(track)
 
         if filtered:
             results = filtered
+
+        # =====================================================
+        # ARTIST-AWARE RANKING BOOST (NEW)
+        # =====================================================
+
+        def score(track, query: str):
+            q = query.lower()
+            title = (getattr(track, "title", "") or "").lower()
+            author = (getattr(track, "author", "") or "").lower()
+
+            score = 0
+
+            # 🎯 EXACT ARTIST MATCH (HIGHEST PRIORITY)
+            if q == author:
+                score += 200
+
+            # 🎯 ARTIST CONTAINS QUERY
+            if q in author:
+                score += 150
+
+            # 🎧 TITLE MATCH
+            if q in title:
+                score += 50
+
+            # 🔎 WORD OVERLAP
+            if any(word in author for word in q.split()):
+                score += 30
+
+            return score
+
+        results = sorted(
+            results,
+            key=lambda t: score(t, query),
+            reverse=True
+        )
 
         # =====================================================
         # SMART PICK
