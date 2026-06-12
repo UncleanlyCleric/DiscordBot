@@ -7,7 +7,6 @@ from services.music.now_playing import build_now_playing_embed
 
 class PlayerMessageManager:
 
-```
 # =====================================================
 # DELETE PLAYER MESSAGE
 # =====================================================
@@ -156,6 +155,5 @@ async def update(self, guild: discord.Guild):
         logging.exception(
             "[UI] failed update"
         )
-```
 
 player_message_manager = PlayerMessageManager()
