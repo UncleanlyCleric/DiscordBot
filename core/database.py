@@ -1,23 +1,24 @@
-import os
 import aiosqlite
-from typing import Optional, Any, Sequence, Union
+from typing import Any, Optional, Sequence, Union
+
+from core.config import config
 
 
 class Database:
+    """
+    Async SQLite wrapper for the bot.
+    """
+
     def __init__(self):
-        self.path = os.getenv("DATABASE_PATH", "/app/storage/db/bot.db")
+        self.path = config.get("database", "path")
         self.conn: Optional[aiosqlite.Connection] = None
 
     async def connect(self):
-        print(f"[DB] Connecting to: {self.path}")
-
         self.conn = await aiosqlite.connect(self.path)
         self.conn.row_factory = aiosqlite.Row
 
         await self.conn.execute("PRAGMA foreign_keys = ON;")
         await self.conn.commit()
-
-        return self.conn
 
     async def close(self):
         if self.conn:
@@ -29,7 +30,7 @@ class Database:
 
         cursor = await self.conn.execute(query, params)
         await self.conn.commit()
-        return cursor  # ✅ IMPORTANT FIX
+        return cursor  # IMPORTANT FIX
 
     async def fetchone(self, query: str, params: Union[Sequence[Any], dict] = ()):
         if not self.conn:
@@ -46,3 +47,7 @@ class Database:
         async with self.conn.execute(query, params) as cursor:
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
+
+
+# ✅ THIS MUST EXIST
+db = Database()
