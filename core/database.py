@@ -13,12 +13,24 @@ class Database:
         self.path = config.get("database", "path")
         self.conn: Optional[aiosqlite.Connection] = None
 
+    import os
+    import aiosqlite
+    from pathlib import Path
+
     async def connect(self):
+        # 🔥 ensure directory exists
+        db_path = Path(self.path)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
         self.conn = await aiosqlite.connect(self.path)
         self.conn.row_factory = aiosqlite.Row
 
         await self.conn.execute("PRAGMA foreign_keys = ON;")
         await self.conn.commit()
+
+        print(f"[DB] Connected at {self.path}")
+
+        return self.conn
 
     async def close(self):
         if self.conn:
