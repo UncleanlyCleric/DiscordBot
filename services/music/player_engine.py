@@ -66,7 +66,7 @@ class MusicEngine:
         logging.info(
             "[PLAY_NEXT] queue_before=%s",
             len(state.queue.all())
-)
+        )
 
         logging.info(
             "[PLAY_NEXT] selected=%s queue_remaining=%s history=%s",
