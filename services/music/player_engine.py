@@ -81,7 +81,15 @@ class MusicEngine:
             state.current_started_at = None
             state.current_duration = None
 
-            await self._update_ui(player)
+            await player_message_manager.delete(
+                player.guild
+            )
+
+            try:
+                await player.disconnect()
+            except Exception:
+                pass
+
             return
         
         logging.info(

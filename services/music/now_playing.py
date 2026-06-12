@@ -16,22 +16,25 @@ def _format_time(ms):
     return f"{minutes}:{seconds:02d}"
 
 
-def _progress_bar(current, total, size=16):
+def _progress_bar(current, total, size=18):
 
     if not total:
         return "▬" * size
 
-    ratio = min(
-        max(current / total, 0),
-        1
-    )
+    ratio = min(max(current / total, 0), 1)
 
-    filled = int(ratio * size)
+    pos = int(ratio * (size - 1))
 
-    return (
-        "▰" * filled
-        + "▱" * (size - filled)
-    )
+    chars = []
+
+    for i in range(size):
+
+        if i == pos:
+            chars.append("🔘")
+        else:
+            chars.append("▬")
+
+    return "".join(chars)
 
 
 def _youtube_thumbnail(uri):
@@ -61,7 +64,7 @@ def build_now_playing_embed(state):
         title="🎵 Now Playing",
         color=discord.Color.blurple()
     )
-
+    
     track = state.current
 
     if not track:
@@ -101,7 +104,7 @@ def build_now_playing_embed(state):
 
         try:
 
-            embed.set_thumbnail(
+            embed.set_image(
                 url=str(artwork)
             )
 
@@ -114,7 +117,7 @@ def build_now_playing_embed(state):
 
     embed.add_field(
         name="Track",
-        value=f"**{track.title}**",
+        value=f"[**{track.title}**]({track.uri})",
         inline=False
     )
 
@@ -181,10 +184,8 @@ def build_now_playing_embed(state):
     embed.add_field(
         name="Progress",
         value=(
-            f"`{bar}`\n"
-            f"{_format_time(elapsed)}"
-            f" / "
-            f"{_format_time(duration)}"
+            f"{bar}\n"
+            f"{_format_time(elapsed)} / {_format_time(duration)}"
         ),
         inline=False
     )
@@ -204,9 +205,8 @@ def build_now_playing_embed(state):
     embed.add_field(
         name="Playback",
         value=(
-            f"🔊 Volume: {state.volume}%\n"
-            f"📜 Queue: {len(queue)} tracks\n"
-            f"⏭ Next: {next_track}"
+            f"⏭ Next: {next_track}\n"
+            f"📜 Queue: {len(queue)}"
         ),
         inline=False
     )
@@ -215,21 +215,27 @@ def build_now_playing_embed(state):
     # LOOP STATUS
     # =====================================================
 
-    embed.add_field(
-        name="Loop",
-        value=(
-            f"🔂 Track: {'On' if state.loop_track else 'Off'}\n"
-            f"🔁 Queue: {'On' if state.loop_queue else 'Off'}"
-        ),
-        inline=False
-    )
+    loop_lines = []
+
+    if state.loop_track:
+        loop_lines.append("🔂 Track Loop")
+
+    if state.loop_queue:
+        loop_lines.append("🔁 Queue Loop")
+
+    if loop_lines:
+        embed.add_field(
+            name="Mode",
+            value="\n".join(loop_lines),
+            inline=False
+        )
 
     # =====================================================
     # FOOTER
     # =====================================================
 
     embed.set_footer(
-        text="Music Player"
+        text=f"{len(queue)} tracks queued | Volume: {state.volume}%"
     )
 
     return embed
