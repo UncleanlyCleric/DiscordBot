@@ -48,6 +48,34 @@ class Database:
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
 
+    # -------------------------
+    # GUILD BOOTSTRAP
+    # -------------------------
 
-# ✅ THIS MUST EXIST
+    async def ensure_guild(self, guild_id: int):
+        await self.execute(
+            """
+            INSERT OR IGNORE INTO guilds (guild_id)
+            VALUES (?)
+            """,
+            (guild_id,)
+        )
+
+        await self.execute(
+            """
+            INSERT OR IGNORE INTO guild_settings (guild_id)
+            VALUES (?)
+            """,
+            (guild_id,)
+        )
+
+        await self.execute(
+            """
+            INSERT OR IGNORE INTO music_state (guild_id)
+            VALUES (?)
+            """,
+            (guild_id,)
+        )
+
+
 db = Database()
