@@ -35,7 +35,7 @@ services:
       - lavalink
 
     volumes:
-      - ./storage/db:/app/storage/db
+      - "/app/storage/db/bot.db"
 
     networks:
       - botnet
