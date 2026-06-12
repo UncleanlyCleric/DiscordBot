@@ -1,4 +1,5 @@
 import re
+import logging
 import wavelink
 
 from services.music.models import Track
@@ -36,10 +37,6 @@ class MusicResolver:
         if not query:
             return []
 
-        # =====================================================
-        # URL DETECTION
-        # =====================================================
-
         is_url = (
             query.startswith("http")
             or re.search(APPLE_MUSIC, query)
@@ -60,26 +57,33 @@ class MusicResolver:
                     query
                 )
 
-                # =================================================
-                # SEARCH DEBUG
-                # =================================================
+                logging.info(
+                    "[SEARCH] query='%s' results=%s",
+                    query,
+                    len(results)
+                )
 
                 for i, track in enumerate(results[:10], start=1):
-                    print(
-                        f"[SEARCH] {i}. "
-                        f"title={getattr(track, 'title', '')} | "
-                        f"author={getattr(track, 'author', '')}"
+                    logging.info(
+                        "[SEARCH] #%s title='%s' author='%s'",
+                        i,
+                        getattr(track, "title", ""),
+                        getattr(track, "author", "")
                     )
 
         except Exception:
+            logging.exception(
+                "[SEARCH] failed query='%s'",
+                query
+            )
             return []
 
         if not results:
+            logging.info(
+                "[SEARCH] no results for '%s'",
+                query
+            )
             return []
-
-        # =====================================================
-        # PLAYLISTS
-        # =====================================================
 
         playlist = getattr(
             results,
@@ -101,6 +105,11 @@ class MusicResolver:
                 results
             )
 
+            logging.info(
+                "[SEARCH] playlist returned tracks=%s",
+                len(tracks)
+            )
+
             return [
                 Track(
                     title=t.title,
@@ -120,10 +129,6 @@ class MusicResolver:
                 )
                 for t in tracks
             ]
-
-        # =====================================================
-        # URLS
-        # =====================================================
 
         if is_url:
 
@@ -147,10 +152,6 @@ class MusicResolver:
                 for t in results
             ]
 
-        # =====================================================
-        # FILTER BAD RESULTS
-        # =====================================================
-
         filtered = []
 
         for track in results:
@@ -171,10 +172,6 @@ class MusicResolver:
 
         if filtered:
             results = filtered
-
-        # =====================================================
-        # ARTIST SEARCH BOOST
-        # =====================================================
 
         query_l = query.lower().strip()
 
@@ -198,17 +195,13 @@ class MusicResolver:
 
             if exact_artist_matches:
 
-                print(
-                    f"[ARTIST_MATCH] "
-                    f"found {len(exact_artist_matches)} "
-                    f"exact artist matches"
+                logging.info(
+                    "[ARTIST_MATCH] found=%s artist='%s'",
+                    len(exact_artist_matches),
+                    query_l
                 )
 
                 results = exact_artist_matches
-
-        # =====================================================
-        # LOCAL RANKING
-        # =====================================================
 
         def score(track):
 
@@ -222,19 +215,18 @@ class MusicResolver:
 
             score = 0
 
-            # exact artist
             if author == query_l:
                 score += 100
 
-            # artist contains query
             if query_l in author:
                 score += 50
 
-            # title contains query
             if query_l in title:
                 score += 25
 
-            query_words = set(query_l.split())
+            query_words = set(
+                query_l.split()
+            )
 
             score += len(
                 query_words &
@@ -254,9 +246,18 @@ class MusicResolver:
             reverse=True
         )
 
-        # =====================================================
-        # SMART PICK
-        # =====================================================
+        logging.info(
+            "[RANKING] top candidates:"
+        )
+
+        for i, track in enumerate(results[:10], start=1):
+            logging.info(
+                "[RANKING] #%s score=%s title='%s' author='%s'",
+                i,
+                score(track),
+                getattr(track, "title", ""),
+                getattr(track, "author", "")
+            )
 
         best = pick_best(
             results,
@@ -266,10 +267,10 @@ class MusicResolver:
         if not best:
             return []
 
-        print(
-            f"[PICKED] "
-            f"title={best.title} | "
-            f"author={getattr(best, 'author', '')}"
+        logging.info(
+            "[PICKED] title='%s' author='%s'",
+            best.title,
+            getattr(best, "author", "")
         )
 
         return [
