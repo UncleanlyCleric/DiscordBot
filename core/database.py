@@ -24,7 +24,7 @@ class Database:
 
         print(f"[DB] Using database at: {db_path.resolve()}")
 
-        print(f"[DB] PATH = {self.path}")
+        print(f"[DATABASE] DB PATH = {self.path}")
         self.conn = await aiosqlite.connect(self.path)
         self.conn.row_factory = aiosqlite.Row
 
