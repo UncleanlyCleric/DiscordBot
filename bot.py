@@ -50,18 +50,12 @@ class DiscordBot(commands.Bot):
     async def setup_hook(self):
 
         setup_logging()
-
-        logging.info("[BOOT] Running migrations...")
         await migration_runner.run()
-
-        logging.info("[BOOT] Connecting DB...")
         await db.connect()
 
-        logging.info("[BOOT] Database ready")
         # =====================================================
         # LAVALINK
         # =====================================================
-        logging.info("[LAVALINK] Connecting node...")
 
         node = wavelink.Node(
             uri=config.lavalink_uri,
@@ -79,8 +73,6 @@ class DiscordBot(commands.Bot):
             await asyncio.sleep(0.5)
         else:
             raise RuntimeError("Lavalink failed to connect")
-
-        logging.info("[LAVALINK] Ready.")
 
         # =====================================================
         # COGS
