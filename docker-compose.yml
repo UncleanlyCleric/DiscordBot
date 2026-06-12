@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   lavalink:
@@ -23,6 +21,7 @@ services:
     networks:
       - botnet
 
+
   bot:
     build: .
     container_name: discord-bot
@@ -31,14 +30,16 @@ services:
     env_file:
       - .env
 
-    environment:
-      - DATABASE_PATH=/app/storage/db/bot.db
+    depends_on:
+      - lavalink
 
     volumes:
       - ./storage/db:/app/storage/db
 
-    depends_on:
-      - lavalink
-
     networks:
       - botnet
+
+
+networks:
+  botnet:
+    driver: bridge
