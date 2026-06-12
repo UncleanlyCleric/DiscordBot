@@ -1,45 +1,37 @@
 import aiosqlite
-from pathlib import Path
 from typing import Any, Optional, Sequence, Union
+from pathlib import Path
 
 from core.config import config
 
 
 class Database:
     """
-    Async SQLite wrapper for the bot.
+    Async SQLite wrapper.
     """
 
     def __init__(self):
         self.path = config.db_path
         self.conn: Optional[aiosqlite.Connection] = None
 
-    # -------------------------
-    # CONNECTION
-    # -------------------------
-
     async def connect(self):
-        # ensure directory exists
+        # Ensure directory exists
         db_path = Path(self.path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.conn = await aiosqlite.connect(self.path)
+        print(f"[DB] Using database at: {db_path.resolve()}")
+
+        self.conn = await aiosqlite.connect(str(db_path))
         self.conn.row_factory = aiosqlite.Row
 
         await self.conn.execute("PRAGMA foreign_keys = ON;")
         await self.conn.commit()
-
-        print(f"[DB] Connected at {self.path}")
 
         return self.conn
 
     async def close(self):
         if self.conn:
             await self.conn.close()
-
-    # -------------------------
-    # CORE QUERY METHODS
-    # -------------------------
 
     async def execute(
         self,
@@ -51,7 +43,7 @@ class Database:
 
         cursor = await self.conn.execute(query, params)
         await self.conn.commit()
-        return cursor
+        return cursor   # IMPORTANT: needed for lastrowid
 
     async def fetchone(
         self,
@@ -83,29 +75,20 @@ class Database:
 
     async def ensure_guild(self, guild_id: int):
         await self.execute(
-            """
-            INSERT OR IGNORE INTO guilds (guild_id)
-            VALUES (?)
-            """,
+            "INSERT OR IGNORE INTO guilds (guild_id) VALUES (?)",
             (guild_id,)
         )
 
         await self.execute(
-            """
-            INSERT OR IGNORE INTO guild_settings (guild_id)
-            VALUES (?)
-            """,
+            "INSERT OR IGNORE INTO guild_settings (guild_id) VALUES (?)",
             (guild_id,)
         )
 
         await self.execute(
-            """
-            INSERT OR IGNORE INTO music_state (guild_id)
-            VALUES (?)
-            """,
+            "INSERT OR IGNORE INTO music_state (guild_id) VALUES (?)",
             (guild_id,)
         )
 
 
-# global singleton
+# Singleton
 db = Database()

@@ -2,12 +2,19 @@ import os
 
 
 class Config:
+    """
+    Single-source configuration system (ENV ONLY).
+    No YAML ambiguity. No silent fallbacks.
+    """
+
     def __init__(self):
+        # Core
         self.discord_token = os.getenv("DISCORD_TOKEN")
 
+        # Lavalink
         self.lavalink_uri = os.getenv(
             "LAVALINK_URI",
-            "http://localhost:2333"
+            "http://lavalink:2333"
         )
 
         self.lavalink_password = os.getenv(
@@ -15,20 +22,22 @@ class Config:
             "youshallnotpass"
         )
 
+        # DATABASE (IMPORTANT FIX)
         self.db_path = os.getenv(
             "DATABASE_PATH",
-            "bot.db"
+            "storage/db/bot.db"
         )
 
-        # Development guild for instant slash-command sync
+        # Dev guild
         self.dev_guild_id = int(
-            os.getenv("DEV_GUILD_ID", "1512944166382993488")
+            os.getenv("DEV_GUILD_ID", "0")
         )
 
-    def get(self, section: str, key: str):
-        return os.getenv(
-            f"{section.upper()}_{key.upper()}"
-        )
+    def get(self, key: str, default=None):
+        """
+        Simple ENV accessor only (no YAML).
+        """
+        return os.getenv(key.upper(), default)
 
 
 config = Config()
