@@ -93,7 +93,8 @@ class MusicEngine:
                     from services.music.resolver import music_resolver
 
                     related = await music_resolver.resolve(
-                        f"{seed_track.author} {seed_track.title}"
+                        related_query,
+                        state.requester_id
                     )
 
                     if related:
