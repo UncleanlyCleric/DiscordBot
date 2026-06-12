@@ -77,20 +77,59 @@ class MusicEngine:
 
         if not next_track:
 
-            state.current = None
-            state.current_started_at = None
-            state.current_duration = None
+            # ==========================================
+            # AUTOPLAY
+            # ==========================================
 
-            await player_message_manager.delete(
-                player.guild
-            )
+            if (
+                state.autoplay
+                and state.history
+            ):
 
-            try:
-                await player.disconnect()
-            except Exception:
-                pass
+                try:
 
-            return
+                    seed_track = state.history[-1]
+
+                    from services.music.resolver import music_resolver
+
+                    related = await music_resolver.resolve(
+                        f"{seed_track.author} {seed_track.title}"
+                    )
+
+                    if related:
+
+                        for track in related[:5]:
+
+                            if track.uri != seed_track.uri:
+                                state.queue.add(track)
+
+                        next_track = state.queue.next()
+
+                except Exception:
+                    logging.exception(
+                        "[AUTOPLAY] failed"
+                    )
+
+            # ==========================================
+            # STILL EMPTY
+            # ==========================================
+
+            if not next_track:
+
+                state.current = None
+                state.current_started_at = None
+                state.current_duration = None
+
+                await player_message_manager.delete(
+                    player.guild
+                )
+
+                try:
+                    await player.disconnect()
+                except Exception:
+                    pass
+
+                return
         
         logging.info(
             "[PLAY_NEXT] playing=%s queue_after=%s",

@@ -6,8 +6,44 @@ from services.music.now_playing import build_now_playing_embed
 
 class MusicPlayerView(discord.ui.View):
 
-    def __init__(self):
+    def __init__(self, guild_id=None):
+
         super().__init__(timeout=None)
+
+        if guild_id is None:
+            return
+
+        state = music_manager.get_player(guild_id)
+
+        for item in self.children:
+
+            if item.custom_id == "music_loop_track":
+                item.style = (
+                    discord.ButtonStyle.success
+                    if state.loop_track
+                    else discord.ButtonStyle.secondary
+                )
+
+            elif item.custom_id == "music_loop_queue":
+                item.style = (
+                    discord.ButtonStyle.success
+                    if state.loop_queue
+                    else discord.ButtonStyle.secondary
+                )
+
+            elif item.custom_id == "music_autoplay":
+                item.style = (
+                    discord.ButtonStyle.success
+                    if getattr(state, "autoplay", False)
+                    else discord.ButtonStyle.secondary
+                )
+
+            elif item.custom_id == "music_dj_mode":
+                item.style = (
+                    discord.ButtonStyle.success
+                    if getattr(state, "dj_mode", False)
+                    else discord.ButtonStyle.secondary
+                )
 
     # =====================================================
     # HELPERS
@@ -19,18 +55,43 @@ class MusicPlayerView(discord.ui.View):
     def _refresh_embed(self, guild_id: int):
         state = self._state(guild_id)
         return build_now_playing_embed(state)
-    
+
+    def _is_dj(self, interaction):
+
+        state = self._state(
+            interaction.guild.id
+        )
+
+        if not getattr(state, "dj_mode", False):
+            return True
+
+        if interaction.user.guild_permissions.manage_guild:
+            return True
+
+        return False
+
+    async def _deny_dj(self, interaction):
+
+        await interaction.response.send_message(
+            "🎧 DJ Mode is enabled.",
+            ephemeral=True
+        )
+
     # =====================================================
     # PREVIOUS
     # =====================================================
 
     @discord.ui.button(
-        emoji="⏮",   
+        emoji="⏮",
         style=discord.ButtonStyle.primary,
         custom_id="music_previous",
         row=0
     )
     async def previous(self, interaction, button):
+
+        if not self._is_dj(interaction):
+            await self._deny_dj(interaction)
+            return
 
         player = interaction.guild.voice_client
 
@@ -43,7 +104,6 @@ class MusicPlayerView(discord.ui.View):
         except Exception:
             pass
 
-    
     # =====================================================
     # PAUSE / RESUME
     # =====================================================
@@ -60,13 +120,19 @@ class MusicPlayerView(discord.ui.View):
 
         if player:
             try:
-                await player.pause(not player.paused)
+                await player.pause(
+                    not player.paused
+                )
             except Exception:
                 pass
 
         await interaction.response.edit_message(
-            embed=self._refresh_embed(interaction.guild.id),
-            view=self
+            embed=self._refresh_embed(
+                interaction.guild.id
+            ),
+            view=MusicPlayerView(
+                interaction.guild.id
+            )
         )
 
     # =====================================================
@@ -81,6 +147,10 @@ class MusicPlayerView(discord.ui.View):
     )
     async def skip(self, interaction, button):
 
+        if not self._is_dj(interaction):
+            await self._deny_dj(interaction)
+            return
+
         player = interaction.guild.voice_client
 
         if player:
@@ -88,8 +158,12 @@ class MusicPlayerView(discord.ui.View):
             await engine.skip(player)
 
         await interaction.response.edit_message(
-            embed=self._refresh_embed(interaction.guild.id),
-            view=self
+            embed=self._refresh_embed(
+                interaction.guild.id
+            ),
+            view=MusicPlayerView(
+                interaction.guild.id
+            )
         )
 
     # =====================================================
@@ -104,6 +178,10 @@ class MusicPlayerView(discord.ui.View):
     )
     async def stop(self, interaction, button):
 
+        if not self._is_dj(interaction):
+            await self._deny_dj(interaction)
+            return
+
         player = interaction.guild.voice_client
 
         if player:
@@ -114,7 +192,6 @@ class MusicPlayerView(discord.ui.View):
             await interaction.response.defer()
         except Exception:
             pass
-        
 
     # =====================================================
     # SHUFFLE
@@ -128,58 +205,35 @@ class MusicPlayerView(discord.ui.View):
     )
     async def shuffle(self, interaction, button):
 
-        state = self._state(interaction.guild.id)
+        if not self._is_dj(interaction):
+            await self._deny_dj(interaction)
+            return
+
+        state = self._state(
+            interaction.guild.id
+        )
 
         state.queue.shuffle()
 
         await interaction.response.edit_message(
-            embed=self._refresh_embed(interaction.guild.id),
-            view=self
-        )
-
-    # =====================================================
-    # QUEUE
-    # =====================================================
-
-    @discord.ui.button(
-        emoji="📜",
-        style=discord.ButtonStyle.secondary,
-        custom_id="music_queue",
-        row=1
-    )
-    async def queue(self, interaction, button):
-
-        state = self._state(interaction.guild.id)
-
-        tracks = state.queue.first(15)
-
-        if not tracks:
-
-            text = "Queue empty."
-
-        else:
-
-            text = "\n".join(
-                f"{i + 1}. {track.title}"
-                for i, track in enumerate(tracks)
+            embed=self._refresh_embed(
+                interaction.guild.id
+            ),
+            view=MusicPlayerView(
+                interaction.guild.id
             )
-
-        await interaction.response.send_message(
-            text,
-            ephemeral=True
         )
 
     # =====================================================
     # HISTORY
-    # ===================================================== 
+    # =====================================================
 
     @discord.ui.button(
-    emoji="🕘",
-    style=discord.ButtonStyle.secondary,
-    custom_id="music_history",
-    row=1
+        emoji="🕘",
+        style=discord.ButtonStyle.secondary,
+        custom_id="music_history",
+        row=1
     )
-    
     async def history(self, interaction, button):
 
         state = self._state(
@@ -198,7 +252,6 @@ class MusicPlayerView(discord.ui.View):
                 "No playback history.",
                 ephemeral=True
             )
-
             return
 
         current = state.current
@@ -219,12 +272,10 @@ class MusicPlayerView(discord.ui.View):
             reversed(history[:-1])
         )[:15]
 
-        for i, track in enumerate(
-            recent
-        ):
+        for i, track in enumerate(recent):
 
             lines.append(
-                f"{i+1}. {track.title}"
+                f"{i + 1}. {track.title}"
             )
 
         await interaction.response.send_message(
@@ -244,7 +295,13 @@ class MusicPlayerView(discord.ui.View):
     )
     async def loop_track(self, interaction, button):
 
-        state = self._state(interaction.guild.id)
+        if not self._is_dj(interaction):
+            await self._deny_dj(interaction)
+            return
+
+        state = self._state(
+            interaction.guild.id
+        )
 
         state.loop_track = not state.loop_track
 
@@ -252,8 +309,12 @@ class MusicPlayerView(discord.ui.View):
             state.loop_queue = False
 
         await interaction.response.edit_message(
-            embed=self._refresh_embed(interaction.guild.id),
-            view=self
+            embed=self._refresh_embed(
+                interaction.guild.id
+            ),
+            view=MusicPlayerView(
+                interaction.guild.id
+            )
         )
 
     # =====================================================
@@ -268,7 +329,13 @@ class MusicPlayerView(discord.ui.View):
     )
     async def loop_queue(self, interaction, button):
 
-        state = self._state(interaction.guild.id)
+        if not self._is_dj(interaction):
+            await self._deny_dj(interaction)
+            return
+
+        state = self._state(
+            interaction.guild.id
+        )
 
         state.loop_queue = not state.loop_queue
 
@@ -276,8 +343,74 @@ class MusicPlayerView(discord.ui.View):
             state.loop_track = False
 
         await interaction.response.edit_message(
-            embed=self._refresh_embed(interaction.guild.id),
-            view=self
+            embed=self._refresh_embed(
+                interaction.guild.id
+            ),
+            view=MusicPlayerView(
+                interaction.guild.id
+            )
+        )
+
+    # =====================================================
+    # AUTOPLAY
+    # =====================================================
+
+    @discord.ui.button(
+        emoji="🤖",
+        style=discord.ButtonStyle.secondary,
+        custom_id="music_autoplay",
+        row=2
+    )
+    async def autoplay(self, interaction, button):
+
+        state = self._state(
+            interaction.guild.id
+        )
+
+        state.autoplay = not getattr(
+            state,
+            "autoplay",
+            False
+        )
+
+        await interaction.response.edit_message(
+            embed=self._refresh_embed(
+                interaction.guild.id
+            ),
+            view=MusicPlayerView(
+                interaction.guild.id
+            )
+        )
+
+    # =====================================================
+    # DJ MODE
+    # =====================================================
+
+    @discord.ui.button(
+        emoji="🎧",
+        style=discord.ButtonStyle.secondary,
+        custom_id="music_dj_mode",
+        row=2
+    )
+    async def dj_mode(self, interaction, button):
+
+        state = self._state(
+            interaction.guild.id
+        )
+
+        state.dj_mode = not getattr(
+            state,
+            "dj_mode",
+            False
+        )
+
+        await interaction.response.edit_message(
+            embed=self._refresh_embed(
+                interaction.guild.id
+            ),
+            view=MusicPlayerView(
+                interaction.guild.id
+            )
         )
 
     # =====================================================
@@ -288,12 +421,19 @@ class MusicPlayerView(discord.ui.View):
         emoji="🔉",
         style=discord.ButtonStyle.secondary,
         custom_id="music_volume_down",
-        row=2
+        row=3
     )
     async def volume_down(self, interaction, button):
 
+        if not self._is_dj(interaction):
+            await self._deny_dj(interaction)
+            return
+
         player = interaction.guild.voice_client
-        state = self._state(interaction.guild.id)
+
+        state = self._state(
+            interaction.guild.id
+        )
 
         if player:
 
@@ -312,8 +452,12 @@ class MusicPlayerView(discord.ui.View):
                 pass
 
         await interaction.response.edit_message(
-            embed=self._refresh_embed(interaction.guild.id),
-            view=self
+            embed=self._refresh_embed(
+                interaction.guild.id
+            ),
+            view=MusicPlayerView(
+                interaction.guild.id
+            )
         )
 
     # =====================================================
@@ -324,12 +468,19 @@ class MusicPlayerView(discord.ui.View):
         emoji="🔊",
         style=discord.ButtonStyle.secondary,
         custom_id="music_volume_up",
-        row=2
+        row=3
     )
     async def volume_up(self, interaction, button):
 
+        if not self._is_dj(interaction):
+            await self._deny_dj(interaction)
+            return
+
         player = interaction.guild.voice_client
-        state = self._state(interaction.guild.id)
+
+        state = self._state(
+            interaction.guild.id
+        )
 
         if player:
 
@@ -348,6 +499,11 @@ class MusicPlayerView(discord.ui.View):
                 pass
 
         await interaction.response.edit_message(
-            embed=self._refresh_embed(interaction.guild.id),
-            view=self
+            embed=self._refresh_embed(
+                interaction.guild.id
+            ),
+            view=MusicPlayerView(
+                interaction.guild.id
+            )
         )
+
