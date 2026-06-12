@@ -321,8 +321,13 @@ class MusicCog(commands.Cog):
                 payload.player
             )
 
+            guild_id = payload.player.guild.id
+            state = music_manager.get_player(guild_id)
+            finished_track = state.current
+
         except Exception:
-            pass
+            import logging
+            logging.exception("[TRACK_END] failed")
 
 
 async def setup(bot: commands.Bot):
