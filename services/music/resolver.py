@@ -46,29 +46,6 @@ class MusicResolver:
             or re.search(SPOTIFY, query)
         )
 
-        # =====================================================
-        # QUERY PARSING (kept, but now used for real fix)
-        # =====================================================
-
-        def parse_query(q: str):
-            q = q.strip()
-            parts = q.split()
-
-            if len(parts) >= 2:
-                return {
-                    "artist": " ".join(parts[:-1]),
-                    "track": parts[-1],
-                    "raw": q
-                }
-
-            return {
-                "artist": None,
-                "track": q,
-                "raw": q
-            }
-
-        parsed = parse_query(query)
-
         try:
 
             if is_url:
@@ -77,37 +54,22 @@ class MusicResolver:
                     query
                 )
 
-            for i, track in enumerate(results[:10], start=1):
-                print(
-                    f"[SEARCH] {i}. "
-                    f"title={getattr(track, 'title', '')} | "
-                    f"author={getattr(track, 'author', '')}"
-                )
-
             else:
 
-                # =====================================================
-                # 🔥 FIX 1: ARTIST-LOCKED SEARCH (PREVENT DRIFT)
-                # =====================================================
-
-                artist = parsed["artist"] or query
-                track = parsed["track"]
-
-                # Step 1: search ONLY artist (reduces garbage results)
-                artist_results = await wavelink.Playable.search(
-                    f"ytmsearch:{artist}"
+                results = await wavelink.Playable.search(
+                    f"ytmsearch:{query}"
                 )
 
-                # Step 2: post-filter by track (if we have one)
-                if track and track != artist:
-                    filtered_results = [
-                        t for t in artist_results
-                        if track.lower() in (t.title or "").lower()
-                    ]
+                # =================================================
+                # SEARCH DEBUG
+                # =================================================
 
-                    results = filtered_results if filtered_results else artist_results
-                else:
-                    results = artist_results
+                for i, track in enumerate(results[:10], start=1):
+                    print(
+                        f"[SEARCH] {i}. "
+                        f"title={getattr(track, 'title', '')} | "
+                        f"author={getattr(track, 'author', '')}"
+                    )
 
         except Exception:
             return []
@@ -186,11 +148,8 @@ class MusicResolver:
             ]
 
         # =====================================================
-        # FILTER BAD RESULTS (SAFE VERSION)
+        # FILTER BAD RESULTS
         # =====================================================
-
-        query_lower = query.lower()
-        artist_intent = len(query_lower.split()) <= 4
 
         filtered = []
 
@@ -202,13 +161,11 @@ class MusicResolver:
                 ""
             ).lower()
 
-            # only filter aggressively when NOT artist intent
             if any(
                 bad in title
                 for bad in BAD_RESULTS
             ):
-                if not artist_intent:
-                    continue
+                continue
 
             filtered.append(track)
 
@@ -216,35 +173,52 @@ class MusicResolver:
             results = filtered
 
         # =====================================================
-        # ARTIST-AWARE RANKING BOOST
-        # (kept intact, still useful as secondary ranking)
+        # LOCAL RANKING
         # =====================================================
 
-        def score(track, query: str):
+        def score(track):
 
-            q = query.lower()
-            title = (getattr(track, "title", "") or "").lower()
-            author = (getattr(track, "author", "") or "").lower()
+            title = (
+                getattr(track, "title", "") or ""
+            ).lower()
+
+            author = (
+                getattr(track, "author", "") or ""
+            ).lower()
+
+            query_l = query.lower()
 
             score = 0
 
-            if q == author:
-                score += 200
+            # exact artist
+            if author == query_l:
+                score += 100
 
-            if q in author:
-                score += 150
-
-            if q in title:
+            # artist contains query
+            if query_l in author:
                 score += 50
 
-            if any(word in author for word in q.split()):
-                score += 30
+            # title contains query
+            if query_l in title:
+                score += 25
+
+            query_words = set(query_l.split())
+
+            score += len(
+                query_words &
+                set(author.split())
+            ) * 10
+
+            score += len(
+                query_words &
+                set(title.split())
+            ) * 5
 
             return score
 
         results = sorted(
             results,
-            key=lambda t: score(t, query),
+            key=score,
             reverse=True
         )
 
@@ -259,6 +233,12 @@ class MusicResolver:
 
         if not best:
             return []
+
+        print(
+            f"[PICKED] "
+            f"title={best.title} | "
+            f"author={getattr(best, 'author', '')}"
+        )
 
         return [
             Track(
