@@ -1,4 +1,5 @@
 import aiosqlite
+from pathlib import Path
 from typing import Any, Optional, Sequence, Union
 
 from core.config import config
@@ -13,12 +14,12 @@ class Database:
         self.path = config.get("database", "path")
         self.conn: Optional[aiosqlite.Connection] = None
 
-    import os
-    import aiosqlite
-    from pathlib import Path
+    # -------------------------
+    # CONNECTION
+    # -------------------------
 
     async def connect(self):
-        # 🔥 ensure directory exists
+        # ensure directory exists
         db_path = Path(self.path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -36,15 +37,27 @@ class Database:
         if self.conn:
             await self.conn.close()
 
-    async def execute(self, query: str, params: Union[Sequence[Any], dict] = ()):
+    # -------------------------
+    # CORE QUERY METHODS
+    # -------------------------
+
+    async def execute(
+        self,
+        query: str,
+        params: Union[Sequence[Any], dict] = ()
+    ):
         if not self.conn:
             raise RuntimeError("Database not connected")
 
         cursor = await self.conn.execute(query, params)
         await self.conn.commit()
-        return cursor  # IMPORTANT FIX
+        return cursor
 
-    async def fetchone(self, query: str, params: Union[Sequence[Any], dict] = ()):
+    async def fetchone(
+        self,
+        query: str,
+        params: Union[Sequence[Any], dict] = ()
+    ):
         if not self.conn:
             raise RuntimeError("Database not connected")
 
@@ -52,7 +65,11 @@ class Database:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
-    async def fetchall(self, query: str, params: Union[Sequence[Any], dict] = ()):
+    async def fetchall(
+        self,
+        query: str,
+        params: Union[Sequence[Any], dict] = ()
+    ):
         if not self.conn:
             raise RuntimeError("Database not connected")
 
@@ -90,4 +107,5 @@ class Database:
         )
 
 
+# global singleton
 db = Database()
