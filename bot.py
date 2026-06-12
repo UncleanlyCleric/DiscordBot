@@ -16,6 +16,8 @@ from database.migrations import migration_runner
 
 from services.music.ui.music_player_view import MusicPlayerView
 
+import inspect
+
 sys.path.append(str(Path(__file__).resolve().parent))
 
 
@@ -55,6 +57,7 @@ class DiscordBot(commands.Bot):
         logging.info("[BOOT] Connecting DB...")
         await db.connect()
 
+        logging.info(inspect.getfile(migration_runner.__class__))
         # =====================================================
         # LAVALINK
         # =====================================================

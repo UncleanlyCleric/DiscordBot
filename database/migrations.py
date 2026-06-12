@@ -1,6 +1,6 @@
 import aiosqlite
 from pathlib import Path
-
+import logging
 from core.config import config
 
 
@@ -15,6 +15,7 @@ class MigrationRunner:
 
     async def run(self):
 
+        logging.info("MIGRATION ENTERED")
         print("=" * 60)
         print("[MIGRATION START]")
         print("=" * 60)
