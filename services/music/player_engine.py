@@ -145,15 +145,18 @@ class MusicEngine:
 
     async def handle_track_end(self, player: wavelink.Player):
 
-        logging.info(
-              "[TRACK_END] manual_skip=%s",
-            guild_id in self._manual_skip
-        )
-
         guild_id = player.guild.id
 
-        start = music_manager.get_player(guild_id)
-        finished_track = start.current
+        state = music_manager.get_player(
+            guild_id
+        )
+
+        finished_track = state.current
+
+        logging.info(
+            "[TRACK_END] manual_skip=%s",
+            guild_id in self._manual_skip
+        )
 
         if guild_id in self._manual_skip:
 
@@ -165,7 +168,6 @@ class MusicEngine:
 
             await self._play_next(player)
             return
-
         # ==========================================
         # TRACK LOOP
         # ==========================================
