@@ -11,7 +11,7 @@ class Database:
     """
 
     def __init__(self):
-        self.path = config.get("database", "path")
+        self.path = config.db_path
         self.conn: Optional[aiosqlite.Connection] = None
 
     # -------------------------
