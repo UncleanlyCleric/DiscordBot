@@ -49,11 +49,11 @@ class DiscordBot(commands.Bot):
 
         setup_logging()
 
-        logging.info("[BOOT] Connecting DB...")
-        await db.connect()
-        
         logging.info("[BOOT] Running migrations...")
         await migration_runner.run()
+
+        logging.info("[BOOT] Connecting DB...")
+        await db.connect()
 
         # =====================================================
         # LAVALINK

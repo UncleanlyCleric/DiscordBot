@@ -6,7 +6,8 @@ from core.config import config
 
 class MigrationRunner:
     def __init__(self):
-        self.db_path = config.get("database", "path")
+        # Use the same path as Database()
+        self.db_path = Path(config.db_path).resolve()
 
         self.schema_path = (
             Path(__file__).resolve().parent / "schema.sql"
@@ -14,20 +15,25 @@ class MigrationRunner:
 
     async def run(self):
 
+        print("=" * 60)
+        print("[MIGRATION START]")
+        print("=" * 60)
+
         if not self.schema_path.exists():
             raise FileNotFoundError(
                 f"Schema file not found: {self.schema_path}"
             )
 
-        db_file = Path(self.db_path).resolve()
-
-        print("=" * 60)
-        print(f"[MIGRATION DB]      {db_file}")
+        print(f"[MIGRATION DB]      {self.db_path}")
         print(f"[SCHEMA FILE]       {self.schema_path}")
-        print(f"[DB EXISTS BEFORE]  {db_file.exists()}")
-        print("=" * 60)
+        print(f"[DB EXISTS BEFORE]  {self.db_path.exists()}")
 
-        async with aiosqlite.connect(str(db_file)) as db:
+        self.db_path.parent.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        async with aiosqlite.connect(self.db_path) as db:
 
             db.row_factory = aiosqlite.Row
 
@@ -39,38 +45,25 @@ class MigrationRunner:
                 encoding="utf-8"
             )
 
-            statements = [
-                s.strip()
-                for s in schema_sql.split(";")
-                if s.strip()
-            ]
-
             print(
-                f"[MIGRATION] Executing {len(statements)} statements"
+                f"[SCHEMA SIZE]      {len(schema_sql)} bytes"
             )
 
-            for stmt in statements:
-                try:
-                    await db.execute(stmt)
+            try:
+                await db.executescript(schema_sql)
+                await db.commit()
 
-                except Exception as e:
-
-                    if "already exists" in str(e).lower():
-                        continue
-
-                    print(
-                        f"[MIGRATION ERROR]\n{stmt[:200]}"
-                    )
-
-                    raise
-
-            await db.commit()
+            except Exception:
+                print("=" * 60)
+                print("[MIGRATION FAILED]")
+                print("=" * 60)
+                raise
 
             cursor = await db.execute(
                 """
                 SELECT name
                 FROM sqlite_master
-                WHERE type='table'
+                WHERE type = 'table'
                 ORDER BY name
                 """
             )
@@ -79,11 +72,16 @@ class MigrationRunner:
 
             print("=" * 60)
             print("[MIGRATION TABLES]")
-            for table in tables:
-                print(f"  - {table['name']}")
             print("=" * 60)
 
+            for table in tables:
+                print(f"  - {table['name']}")
+
+            print("=" * 60)
+
+        print(f"[DB EXISTS AFTER]   {self.db_path.exists()}")
         print("[DB] Migrations complete.")
+        print("=" * 60)
 
 
 migration_runner = MigrationRunner()
