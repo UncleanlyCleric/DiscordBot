@@ -156,4 +156,4 @@ class PlayerMessageManager:
                 "[UI] failed update"
             )
 
-    player_message_manager = PlayerMessageManager()
+player_message_manager = PlayerMessageManager()
