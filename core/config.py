@@ -28,3 +28,5 @@ class Config:
 
     def get(self, section: str, key: str):
         return self.yaml.get(section, {}).get(key)
+    
+config = Config()
