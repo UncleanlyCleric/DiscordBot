@@ -1,5 +1,5 @@
 database:
-  path: "storage/db/bot.db"
+  pool_size: 5
 
 logging:
   level: "INFO"

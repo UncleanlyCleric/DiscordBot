@@ -31,15 +31,14 @@ services:
     env_file:
       - .env
 
+    environment:
+      - DATABASE_PATH=/app/storage/db/bot.db
+
+    volumes:
+      - ./storage/db:/app/storage/db
+
     depends_on:
       - lavalink
 
-    volumes:
-      - "/app/storage/db/bot.db"
-
     networks:
       - botnet
-
-networks:
-  botnet:
-    driver: bridge
