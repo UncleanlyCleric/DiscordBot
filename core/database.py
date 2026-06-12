@@ -11,8 +11,11 @@ class Database:
     """
 
     def __init__(self):
-        self.path = config.db_path
+        self.path = Path(config.db_path).resolve()
         self.conn: Optional[aiosqlite.Connection] = None
+        print("[DB PATH FINAL]", self.path)
+        self.db_path = Path(config.db_path).resolve()
+        print("[MIGRATIONS DB]", self.db_path)
 
     async def connect(self):
         # Ensure directory exists
