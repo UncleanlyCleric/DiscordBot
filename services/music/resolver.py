@@ -201,7 +201,32 @@ class MusicResolver:
                     query_l
                 )
 
-                results = exact_artist_matches
+                best = exact_artist_matches[0]
+
+                logging.info(
+                    "[PICKED_ARTIST] title='%s' author='%s'",
+                    getattr(best, "title", ""),
+                    getattr(best, "author", "")
+                )
+
+                return [
+                    Track(
+                        title=best.title,
+                        author=getattr(
+                            best,
+                            "author",
+                            None
+                        ),
+                        uri=best.uri,
+                        requester_id=requester_id,
+                        playable=best,
+                        artwork=getattr(
+                            best,
+                            "artwork",
+                            None
+                        ),
+                    )
+                ]
 
         def score(track):
 
