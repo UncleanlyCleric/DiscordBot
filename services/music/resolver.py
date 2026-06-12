@@ -47,14 +47,13 @@ class MusicResolver:
         )
 
         # =====================================================
-        # 🎯 NEW: QUERY PARSING (MAJOR FIX)
+        # QUERY PARSING (kept, but now used for real fix)
         # =====================================================
 
         def parse_query(q: str):
             q = q.strip()
             parts = q.split()
 
-            # heuristic: "artist + track"
             if len(parts) >= 2:
                 return {
                     "artist": " ".join(parts[:-1]),
@@ -80,18 +79,28 @@ class MusicResolver:
 
             else:
 
-                # =================================================
-                # 🔥 FIX: SMART QUERY REWRITE
-                # =================================================
+                # =====================================================
+                # 🔥 FIX 1: ARTIST-LOCKED SEARCH (PREVENT DRIFT)
+                # =====================================================
 
-                if parsed["artist"] and parsed["track"]:
-                    search_query = f'{parsed["artist"]} - {parsed["track"]}'
-                else:
-                    search_query = query
+                artist = parsed["artist"] or query
+                track = parsed["track"]
 
-                results = await wavelink.Playable.search(
-                    f"ytmsearch:{search_query}"
+                # Step 1: search ONLY artist (reduces garbage results)
+                artist_results = await wavelink.Playable.search(
+                    f"ytmsearch:{artist}"
                 )
+
+                # Step 2: post-filter by track (if we have one)
+                if track and track != artist:
+                    filtered_results = [
+                        t for t in artist_results
+                        if track.lower() in (t.title or "").lower()
+                    ]
+
+                    results = filtered_results if filtered_results else artist_results
+                else:
+                    results = artist_results
 
         except Exception:
             return []
@@ -201,6 +210,7 @@ class MusicResolver:
 
         # =====================================================
         # ARTIST-AWARE RANKING BOOST
+        # (kept intact, still useful as secondary ranking)
         # =====================================================
 
         def score(track, query: str):
@@ -211,19 +221,15 @@ class MusicResolver:
 
             score = 0
 
-            # 🎯 exact artist match
             if q == author:
                 score += 200
 
-            # 🎯 artist contains query
             if q in author:
                 score += 150
 
-            # 🎧 title match
             if q in title:
                 score += 50
 
-            # 🔎 word overlap
             if any(word in author for word in q.split()):
                 score += 30
 
