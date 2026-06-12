@@ -56,8 +56,14 @@ class MusicResolver:
 
             else:
 
+                # prevent accidental double-prefixing
+                if query.startswith("ytmsearch:"):
+                    search_query = query
+                else:
+                    search_query = f"ytmsearch:{query}"
+
                 results = await wavelink.Playable.search(
-                    f"ytmsearch:{query}"
+                    search_query
                 )
 
                 # =================================================
@@ -173,6 +179,40 @@ class MusicResolver:
             results = filtered
 
         # =====================================================
+        # ARTIST SEARCH BOOST
+        # =====================================================
+
+        query_l = query.lower().strip()
+
+        artist_search = (
+            len(query_l.split()) <= 3
+            and not any(
+                x in query_l
+                for x in [" - ", ":"]
+            )
+        )
+
+        if artist_search:
+
+            exact_artist_matches = [
+                track
+                for track in results
+                if (
+                    getattr(track, "author", "") or ""
+                ).lower().strip() == query_l
+            ]
+
+            if exact_artist_matches:
+
+                print(
+                    f"[ARTIST_MATCH] "
+                    f"found {len(exact_artist_matches)} "
+                    f"exact artist matches"
+                )
+
+                results = exact_artist_matches
+
+        # =====================================================
         # LOCAL RANKING
         # =====================================================
 
@@ -185,8 +225,6 @@ class MusicResolver:
             author = (
                 getattr(track, "author", "") or ""
             ).lower()
-
-            query_l = query.lower()
 
             score = 0
 
