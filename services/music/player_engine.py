@@ -90,11 +90,16 @@ class MusicEngine:
 
                     seed_track = state.history[-1]
 
+                    logging.info(
+                        "[AUTOPLAY] seed requester=%s",
+                        getattr(seed_track, "requester_id", None)
+                    )
+
                     from services.music.resolver import music_resolver
 
                     related = await music_resolver.resolve(
-                        related_query,
-                        state.requester_id
+                        f"{seed_track.author} {seed_track.title}",
+                        seed_track.requester_id
                     )
 
                     if related:
