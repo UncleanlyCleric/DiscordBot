@@ -245,24 +245,32 @@ class MusicResolver:
         # SMART PICK
         # =====================================================
 
-        artist = parsed["artist"]
-        track = parsed["track"]
+        best = pick_best(
+            results,
+            query
+        )
 
-        candidates = results
+        if not best:
+            return []
 
-        # If we have clear artist + track intent → HARD FILTER
-        if artist and track:
-
-            strict = [
-                t for t in results
-                if track.lower() in (t.title or "").lower()
-                and artist.lower() in (t.author or "").lower()
-            ]
-
-            if strict:
-                candidates = strict
-
-        best = candidates[0] if candidates else None
+        return [
+            Track(
+                title=best.title,
+                author=getattr(
+                    best,
+                    "author",
+                    None
+                ),
+                uri=best.uri,
+                requester_id=requester_id,
+                playable=best,
+                artwork=getattr(
+                    best,
+                    "artwork",
+                    None
+                ),
+            )
+        ]
 
 
 music_resolver = MusicResolver()

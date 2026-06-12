@@ -1,4 +1,3 @@
-import re
 from typing import List
 
 
@@ -7,17 +6,31 @@ BAD_WORDS = [
 ]
 
 
-def score_track(title: str, query: str) -> float:
+def score_track(title: str, author: str, query: str) -> float:
     """
-    Simple production-grade heuristic scorer.
+    Improved scorer with ARTIST awareness.
     """
 
-    title_l = title.lower()
+    title_l = (title or "").lower()
+    author_l = (author or "").lower()
     query_l = query.lower()
 
     score = 0.0
 
-    # exact match boost
+    # =====================================================
+    # 🎯 HARD ARTIST MATCH (MOST IMPORTANT FIX)
+    # =====================================================
+
+    if author_l and author_l in query_l:
+        score += 20
+
+    if query_l in author_l:
+        score += 15
+
+    # =====================================================
+    # TITLE MATCHING
+    # =====================================================
+
     if query_l in title_l:
         score += 5
 
@@ -27,12 +40,15 @@ def score_track(title: str, query: str) -> float:
 
     score += len(query_words & title_words) * 1.5
 
-    # penalize bad variants
+    # =====================================================
+    # PENALIZE BAD VERSIONS
+    # =====================================================
+
     for bad in BAD_WORDS:
         if bad in title_l:
             score -= 2
 
-    # prefer official-like results
+    # prefer official
     if "official" in title_l:
         score += 1.5
 
@@ -46,7 +62,11 @@ def pick_best(results, query: str):
 
     ranked = sorted(
         results,
-        key=lambda t: score_track(getattr(t, "title", ""), query),
+        key=lambda t: score_track(
+            getattr(t, "title", ""),
+            getattr(t, "author", ""),
+            query
+        ),
         reverse=True
     )
 
