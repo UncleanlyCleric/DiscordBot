@@ -232,7 +232,7 @@ class MusicPlayerView(discord.ui.View):
         emoji="🕘",
         style=discord.ButtonStyle.secondary,
         custom_id="music_history",
-        row=1
+        row=2
     )
     async def history(self, interaction, button):
 
@@ -363,6 +363,14 @@ class MusicPlayerView(discord.ui.View):
     )
     async def autoplay(self, interaction, button):
 
+        if not interaction.user.guild_permissions.manage_guild:
+
+            await interaction.response.send_message(
+                "You need Manage Server permission to change Autoplay.",
+                ephemeral=True
+            )
+            return
+
         state = self._state(
             interaction.guild.id
         )
@@ -390,7 +398,7 @@ class MusicPlayerView(discord.ui.View):
         emoji="🎧",
         style=discord.ButtonStyle.secondary,
         custom_id="music_dj_mode",
-        row=1
+        row=2
     )
     async def dj_mode(self, interaction, button):
 
@@ -421,7 +429,7 @@ class MusicPlayerView(discord.ui.View):
         emoji="🔉",
         style=discord.ButtonStyle.secondary,
         custom_id="music_volume_down",
-        row=0
+        row=1
     )
     async def volume_down(self, interaction, button):
 
