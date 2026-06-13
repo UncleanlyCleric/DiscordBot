@@ -359,7 +359,7 @@ class MusicPlayerView(discord.ui.View):
         emoji="🤖",
         style=discord.ButtonStyle.secondary,
         custom_id="music_autoplay",
-        row=2
+        row=1
     )
     async def autoplay(self, interaction, button):
 
@@ -390,7 +390,7 @@ class MusicPlayerView(discord.ui.View):
         emoji="🎧",
         style=discord.ButtonStyle.secondary,
         custom_id="music_dj_mode",
-        row=2
+        row=1
     )
     async def dj_mode(self, interaction, button):
 
@@ -421,7 +421,7 @@ class MusicPlayerView(discord.ui.View):
         emoji="🔉",
         style=discord.ButtonStyle.secondary,
         custom_id="music_volume_down",
-        row=2
+        row=0
     )
     async def volume_down(self, interaction, button):
 
@@ -468,7 +468,7 @@ class MusicPlayerView(discord.ui.View):
         emoji="🔊",
         style=discord.ButtonStyle.secondary,
         custom_id="music_volume_up",
-        row=2
+        row=0
     )
     async def volume_up(self, interaction, button):
 
