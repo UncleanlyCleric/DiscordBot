@@ -98,7 +98,7 @@ class MusicEngine:
                     from services.music.resolver import music_resolver
 
                     related = await music_resolver.resolve(
-                        f"{seed_track.author} radio",
+                        seed_track.author,
                         seed_track.requester_id
                     )
 
@@ -144,6 +144,27 @@ class MusicEngine:
                     logging.exception(
                         "[AUTOPLAY] failed"
                     )
+
+        # ==========================================
+        # STILL NOTHING TO PLAY
+        # ==========================================
+
+        if not next_track:
+
+            state.current = None
+            state.current_started_at = None
+            state.current_duration = None
+
+            await player_message_manager.delete(
+                player.guild
+            )
+
+            try:
+                await player.disconnect()
+            except Exception:
+                pass
+
+            return
 
         # =====================================================
         # HISTORY
