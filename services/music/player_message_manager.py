@@ -75,7 +75,7 @@ class PlayerMessageManager:
 
         embed = build_now_playing_embed(state)
 
-        view = MusicPlayerView()
+        view = MusicPlayerView(guild.id)
 
         message = None
 
