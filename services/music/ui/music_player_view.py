@@ -402,6 +402,14 @@ class MusicPlayerView(discord.ui.View):
     )
     async def dj_mode(self, interaction, button):
 
+        if not interaction.user.guild_permissions.manage_guild:
+
+            await interaction.response.send_message(
+                "You need Manage Server permission to change DJ Mode.",
+                ephemeral=True
+            )
+            return
+
         state = self._state(
             interaction.guild.id
         )

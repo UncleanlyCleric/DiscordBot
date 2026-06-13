@@ -45,44 +45,96 @@ class MusicResolver:
 
         try:
 
-            if is_url:
+            results = await wavelink.Playable.search(
+                query
+            )
 
-                results = await wavelink.Playable.search(
-                    query
+            # ==========================================
+            # Spotify fallback
+            # ==========================================
+
+            if (
+                not results
+                and re.search(SPOTIFY, query)
+            ):
+
+                logging.warning(
+                    "[SPOTIFY] direct lookup failed, falling back"
                 )
 
-            else:
+                try:
 
-                results = await wavelink.Playable.search(
-                    query
-                )
-
-                logging.info(
-                    "[SEARCH] query='%s' results=%s",
-                    query,
-                    len(results)
-                )
-
-                for i, track in enumerate(results[:10], start=1):
-                    logging.info(
-                        "[SEARCH] #%s title='%s' author='%s'",
-                        i,
-                        getattr(track, "title", ""),
-                        getattr(track, "author", "")
+                    playlist_match = re.search(
+                        r"playlist/([A-Za-z0-9]+)",
+                        query
                     )
 
+                    track_match = re.search(
+                        r"track/([A-Za-z0-9]+)",
+                        query
+                    )
+
+                    if playlist_match:
+
+                        logging.warning(
+                            "[SPOTIFY] playlist fallback not available without Spotify API credentials"
+                        )
+
+                        return []
+
+                    elif track_match:
+
+                        logging.info(
+                            "[SPOTIFY] track fallback search"
+                        )
+
+                        spotify_id = track_match.group(1)
+
+                        fallback_query = spotify_id
+
+                        results = await wavelink.Playable.search(
+                            fallback_query
+                        )
+
+                except Exception:
+
+                    logging.exception(
+                        "[SPOTIFY] fallback failed"
+                    )
+
+                    return []
+
+            logging.info(
+                "[SEARCH] query='%s' results=%s",
+                query,
+                len(results)
+            )
+
+            for i, track in enumerate(results[:10], start=1):
+
+                logging.info(
+                    "[SEARCH] #%s title='%s' author='%s'",
+                    i,
+                    getattr(track, "title", ""),
+                    getattr(track, "author", "")
+                )
+
         except Exception:
+
             logging.exception(
                 "[SEARCH] failed query='%s'",
                 query
             )
+
             return []
 
         if not results:
+
             logging.info(
                 "[SEARCH] no results for '%s'",
                 query
             )
+
             return []
 
         playlist = getattr(
@@ -276,6 +328,7 @@ class MusicResolver:
         )
 
         for i, track in enumerate(results[:10], start=1):
+
             logging.info(
                 "[RANKING] #%s score=%s title='%s' author='%s'",
                 i,
