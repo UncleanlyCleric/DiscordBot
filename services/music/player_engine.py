@@ -77,71 +77,73 @@ class MusicEngine:
 
         if not next_track:
 
-            # ==========================================
-            # AUTOPLAY
-            # ==========================================
+        # ==========================================
+        # AUTOPLAY
+        # ==========================================
 
-            if (
-                state.autoplay
-                and state.history
-            ):
+        if (
+            getattr(state, "autoplay", False)
+            and state.history
+        ):
 
-                try:
+            try:
 
-                    seed_track = state.history[-1]
+                seed_track = state.history[-1]
 
-                    logging.info(
-                        "[AUTOPLAY] seed requester=%s",
-                        getattr(seed_track, "requester_id", None)
-                    )
-
-                    from services.music.resolver import music_resolver
-
-                    related = await music_resolver.resolve(
-                        f"{seed_track.author} {seed_track.title}",
-                        seed_track.requester_id
-                    )
-
-                    if related:
-
-                        for track in related[:5]:
-
-                            if track.uri != seed_track.uri:
-                                state.queue.add(track)
-
-                        next_track = state.queue.next()
-
-                except Exception:
-                    logging.exception(
-                        "[AUTOPLAY] failed"
-                    )
-
-            # ==========================================
-            # STILL EMPTY
-            # ==========================================
-
-            if not next_track:
-
-                state.current = None
-                state.current_started_at = None
-                state.current_duration = None
-
-                await player_message_manager.delete(
-                    player.guild
+                logging.info(
+                    "[AUTOPLAY] seed=%s",
+                    seed_track.title
                 )
 
-                try:
-                    await player.disconnect()
-                except Exception:
-                    pass
+                from services.music.resolver import music_resolver
 
-                return
-        
-        logging.info(
-            "[PLAY_NEXT] playing=%s queue_after=%s",
-            next_track.title,
-            len(state.queue.all())
-        )
+                related = await music_resolver.resolve(
+                    f"{seed_track.author} radio",
+                    seed_track.requester_id
+                )
+
+                if related:
+
+                    added = 0
+
+                    history_uris = {
+                        t.uri
+                        for t in state.history[-20:]
+                    }
+
+                    queue_uris = {
+                        t.uri
+                        for t in state.queue.all()
+                    }
+
+                    for track in related:
+
+                        if (
+                            track.uri == seed_track.uri
+                            or track.uri in history_uris
+                            or track.uri in queue_uris
+                        ):
+                            continue
+
+                        state.queue.add(track)
+
+                        added += 1
+
+                        if added >= 5:
+                            break
+
+                    logging.info(
+                        "[AUTOPLAY] added=%s",
+                        added
+                    )
+
+                    next_track = state.queue.next()
+
+            except Exception:
+
+                logging.exception(
+                    "[AUTOPLAY] failed"
+                )
 
         # =====================================================
         # HISTORY

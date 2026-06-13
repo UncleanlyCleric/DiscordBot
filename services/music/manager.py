@@ -31,6 +31,8 @@ class MusicState:
     autoplay: bool = False
     dj_mode: bool = False
 
+    last_track: Any = None
+
     # =====================================================
     # TRACK MEMORY
     # =====================================================
