@@ -356,7 +356,7 @@ class MusicPlayerView(discord.ui.View):
     # =====================================================
 
     @discord.ui.button(
-        emoji="🤖",
+        emoji="♾️",
         style=discord.ButtonStyle.secondary,
         custom_id="music_autoplay",
         row=1
