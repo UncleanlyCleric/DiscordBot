@@ -81,69 +81,69 @@ class MusicEngine:
         # AUTOPLAY
         # ==========================================
 
-        if (
-            getattr(state, "autoplay", False)
-            and state.history
-        ):
+            if (
+                getattr(state, "autoplay", False)
+                and state.history
+            ):
 
-            try:
+                try:
 
-                seed_track = state.history[-1]
-
-                logging.info(
-                    "[AUTOPLAY] seed=%s",
-                    seed_track.title
-                )
-
-                from services.music.resolver import music_resolver
-
-                related = await music_resolver.resolve(
-                    f"{seed_track.author} radio",
-                    seed_track.requester_id
-                )
-
-                if related:
-
-                    added = 0
-
-                    history_uris = {
-                        t.uri
-                        for t in state.history[-20:]
-                    }
-
-                    queue_uris = {
-                        t.uri
-                        for t in state.queue.all()
-                    }
-
-                    for track in related:
-
-                        if (
-                            track.uri == seed_track.uri
-                            or track.uri in history_uris
-                            or track.uri in queue_uris
-                        ):
-                            continue
-
-                        state.queue.add(track)
-
-                        added += 1
-
-                        if added >= 5:
-                            break
+                    seed_track = state.history[-1]
 
                     logging.info(
-                        "[AUTOPLAY] added=%s",
-                        added
+                        "[AUTOPLAY] seed=%s",
+                        seed_track.title
                     )
 
-                    next_track = state.queue.next()
+                    from services.music.resolver import music_resolver
 
-            except Exception:
+                    related = await music_resolver.resolve(
+                        f"{seed_track.author} radio",
+                        seed_track.requester_id
+                    )
 
-                logging.exception(
-                    "[AUTOPLAY] failed"
-                )
+                    if related:
+
+                        added = 0
+
+                        history_uris = {
+                            t.uri
+                            for t in state.history[-20:]
+                        }
+
+                        queue_uris = {
+                            t.uri
+                            for t in state.queue.all()
+                        }
+
+                        for track in related:
+
+                            if (
+                                track.uri == seed_track.uri
+                                or track.uri in history_uris
+                                or track.uri in queue_uris
+                            ):
+                                continue
+
+                            state.queue.add(track)
+
+                            added += 1
+
+                            if added >= 5:
+                                break
+
+                        logging.info(
+                            "[AUTOPLAY] added=%s",
+                            added
+                        )
+
+                        next_track = state.queue.next()
+
+                except Exception:
+
+                    logging.exception(
+                        "[AUTOPLAY] failed"
+                    )
 
         # =====================================================
         # HISTORY
