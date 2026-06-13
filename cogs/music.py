@@ -43,7 +43,8 @@ class MusicCog(commands.Cog):
     async def play(
         self,
         interaction: discord.Interaction,
-        query: str
+        query: str | None = None,
+        attachment: discord.Attachment | None = None
     ):
 
         await interaction.response.defer(
@@ -67,10 +68,19 @@ class MusicCog(commands.Cog):
             interaction.channel.id
         )
 
-        tracks = await music_resolver.resolve(
-            query,
-            interaction.user.id
-        )
+        if attachment:
+
+            tracks = await music_resolver.resolve_attachment(
+                attachment,
+                interaction.user.id
+            )
+
+        else:
+
+            tracks = await music_resolver.resolve(
+                query,
+                interaction.user.id
+            )
 
         if not tracks:
             return await interaction.followup.send(
@@ -323,7 +333,7 @@ class MusicCog(commands.Cog):
 
             guild_id = payload.player.guild.id
             state = music_manager.get_player(guild_id)
-            finished_track = state.current
+            finished
 
         except Exception:
             import logging

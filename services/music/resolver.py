@@ -36,6 +36,14 @@ class MusicResolver:
 
         if not query:
             return []
+        
+        if re.search(SPOTIFY, query):
+
+            logging.warning(
+                "[SPOTIFY] Spotify URLs are disabled"
+            )
+
+            return []
 
         is_url = (
             query.startswith("http")
@@ -49,60 +57,6 @@ class MusicResolver:
                 query
             )
 
-            # ==========================================
-            # Spotify fallback
-            # ==========================================
-
-            if (
-                not results
-                and re.search(SPOTIFY, query)
-            ):
-
-                logging.warning(
-                    "[SPOTIFY] direct lookup failed, falling back"
-                )
-
-                try:
-
-                    playlist_match = re.search(
-                        r"playlist/([A-Za-z0-9]+)",
-                        query
-                    )
-
-                    track_match = re.search(
-                        r"track/([A-Za-z0-9]+)",
-                        query
-                    )
-
-                    if playlist_match:
-
-                        logging.warning(
-                            "[SPOTIFY] playlist fallback not available without Spotify API credentials"
-                        )
-
-                        return []
-
-                    elif track_match:
-
-                        logging.info(
-                            "[SPOTIFY] track fallback search"
-                        )
-
-                        spotify_id = track_match.group(1)
-
-                        fallback_query = spotify_id
-
-                        results = await wavelink.Playable.search(
-                            fallback_query
-                        )
-
-                except Exception:
-
-                    logging.exception(
-                        "[SPOTIFY] fallback failed"
-                    )
-
-                    return []
 
             logging.info(
                 "[SEARCH] query='%s' results=%s",
